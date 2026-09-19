@@ -1,5 +1,5 @@
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import hashlib
 import json
 from pathlib import Path
@@ -20,7 +20,7 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 def create_manifest(dataset: str, source: str, data_path: Path, rows: int) -> DatasetManifest:
-    return DatasetManifest(dataset, source, datetime.now(timezone.utc).isoformat(), sha256_file(data_path), rows)
+    return DatasetManifest(dataset, source, datetime.now(UTC).isoformat(), sha256_file(data_path), rows)
 
 def write_manifest(manifest: DatasetManifest, path: Path) -> None:
     path.write_text(json.dumps(asdict(manifest), indent=2), encoding="utf-8")
