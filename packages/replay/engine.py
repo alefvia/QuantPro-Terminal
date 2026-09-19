@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Iterable, Iterator
+from collections.abc import Iterable, Iterator
 
 @dataclass(frozen=True)
 class ReplayEvent:
