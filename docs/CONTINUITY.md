@@ -1,8 +1,8 @@
 # QuantPro Terminal — Continuável
 
 Data: 2026-09-19
-Versão: 0.6
-Branch: intelligence/f5-f7-2026-09-19
+Versão: 0.7
+Branch: validation/f8-f10-2026-09-19
 
 ## Decisões canônicas
 - Projeto independente da ALEFVIA.
@@ -23,9 +23,9 @@ F4 Structure/Volume/Volatility — CONCLUÍDA (CI verde)
 F5 Macro/Intermarket/Positioning/Event — CONCLUÍDA (CI verde)
 F6 Regime/baseline — CONCLUÍDA (CI verde)
 F7 Quant/ML foundation — CONCLUÍDA (CI verde)
-F8 Replay/journal — PENDENTE
-F9 Decision + AI Analyst — PENDENTE
-F10 Risk + Paper — PENDENTE
+F8 Backtest/walk-forward — IMPLEMENTADA; CI pendente
+F9 Replay/journal — IMPLEMENTADA; CI pendente
+F10 Decision + AI Analyst — IMPLEMENTADA; CI pendente
 F11 Walk-forward/paper ao vivo — PENDENTE
 F12 Level 2 — PENDENTE
 F13 MBO A/B — PENDENTE
@@ -66,3 +66,6 @@ Implementados macro/intermarket, COT positioning, event risk, regime detector, f
 - Python CI SUCCESS (Ruff + pytest).
 - Web CI SUCCESS.
 - Próximo bloco: backtest causal/walk-forward, replay e journal.
+
+## F8/F9/F10 — 19/09/2026
+Backtest com custos/slippage e métricas, walk-forward temporal, replay por available_at, decision log/journal, TradeThesis e AI Analyst explicável implementados. Evento/veto força WAIT; probabilidade continua não calibrada.
