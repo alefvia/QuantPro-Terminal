@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 
@@ -29,6 +29,6 @@ class FredClient:
         for item in response.json()["observations"]:
             if item["value"] == ".":
                 continue
-            observed_at = datetime.fromisoformat(item["date"]).replace(tzinfo=timezone.utc)
+            observed_at = datetime.fromisoformat(item["date"]).replace(tzinfo=UTC)
             rows.append(MarketObservation(series_id, observed_at, "fred", float(item["value"]), "value"))
         return rows
