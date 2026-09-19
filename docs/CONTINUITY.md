@@ -20,9 +20,9 @@ F1 Dados gratuitos — CONCLUÍDA (CI verde)
 F2 Data/feature store — CONCLUÍDA (CI verde)
 F3 Terminal — CONCLUÍDA (CI verde)
 F4 Structure/Volume/Volatility — CONCLUÍDA (CI verde)
-F5 Macro/Intermarket/Positioning/Event — IMPLEMENTADA; CI pendente
-F6 Regime/baseline — IMPLEMENTADA; CI pendente
-F7 Quant/ML foundation — IMPLEMENTADA; CI pendente
+F5 Macro/Intermarket/Positioning/Event — CONCLUÍDA (CI verde)
+F6 Regime/baseline — CONCLUÍDA (CI verde)
+F7 Quant/ML foundation — CONCLUÍDA (CI verde)
 F8 Replay/journal — PENDENTE
 F9 Decision + AI Analyst — PENDENTE
 F10 Risk + Paper — PENDENTE
@@ -61,3 +61,8 @@ Terminal profissional base para NQ/MNQ/GC/MGC implementado, com estados explíci
 
 ## F5/F6/F7 — 19/09/2026
 Implementados macro/intermarket, COT positioning, event risk, regime detector, feature vector, baseline quantitativo transparente, split temporal e ensemble com WAIT por desacordo. Probabilidade continua indisponível até calibração OOS.
+
+## Evidência F5/F6/F7
+- Python CI SUCCESS (Ruff + pytest).
+- Web CI SUCCESS.
+- Próximo bloco: backtest causal/walk-forward, replay e journal.
