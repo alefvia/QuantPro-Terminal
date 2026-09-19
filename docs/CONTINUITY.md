@@ -1,8 +1,8 @@
 # QuantPro Terminal — Continuável
 
 Data: 2026-09-19
-Versão: 0.3
-Branch: foundation/f0-2026-09-19
+Versão: 0.4
+Branch: data/f1-f2-2026-09-19
 
 ## Decisões canônicas
 - Projeto independente da ALEFVIA.
@@ -16,8 +16,8 @@ Branch: foundation/f0-2026-09-19
 
 ## Fases
 F0 Fundação — CONCLUÍDA (CI Python + Web verde)
-F1 Dados gratuitos — PENDENTE
-F2 Data/feature store — PENDENTE
+F1 Dados gratuitos — CONCLUÍDA (CI verde)
+F2 Data/feature store — CONCLUÍDA (CI verde)
 F3 Terminal — PENDENTE
 F4 Structure/Volume/Volatility — PENDENTE
 F5 Macro/Intermarket/Positioning/Event — PENDENTE
@@ -40,3 +40,13 @@ F14 Live — BLOQUEADO
 
 ## Próximo checkpoint
 Iniciar F1: fontes gratuitas, catálogo de dados, conectores macro/COT e primeira persistência reproduzível.
+
+
+## F1/F2 — 19/09/2026
+Implementados catálogo macro/intermarket, cliente FRED, adapter CFTC, validação de qualidade, esquema temporal canônico, Parquet atômico, manifests SHA-256, filtro point-in-time e testes. Dados de futuros NQ/GC em tempo real não são simulados: exigem feed legal específico. FRED requer chave do usuário e permanece fora do repositório.
+
+## Evidência F1/F2
+- Commit 33ce0ab: Python CI SUCCESS (install, Ruff, pytest).
+- Web CI SUCCESS (Next.js build).
+- Testes incluem anti-look-ahead point-in-time e round-trip Parquet.
+- Próxima fase: F3 Terminal com dados/estado dos conectores.
