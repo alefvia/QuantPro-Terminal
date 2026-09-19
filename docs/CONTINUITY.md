@@ -1,7 +1,7 @@
 # QuantPro Terminal — Continuável
 
 Data: 2026-09-19
-Versão: 0.2
+Versão: 0.3
 Branch: foundation/f0-2026-09-19
 
 ## Decisões canônicas
@@ -15,7 +15,7 @@ Branch: foundation/f0-2026-09-19
 - Research -> OOS/walk-forward -> Paper -> somente depois avaliar Live.
 
 ## Fases
-F0 Fundação — EM ANDAMENTO
+F0 Fundação — CONCLUÍDA (CI Python + Web verde)
 F1 Dados gratuitos — PENDENTE
 F2 Data/feature store — PENDENTE
 F3 Terminal — PENDENTE
@@ -31,5 +31,12 @@ F12 Level 2 — PENDENTE
 F13 MBO A/B — PENDENTE
 F14 Live — BLOQUEADO
 
+## Evidência F0
+- CI GitHub Actions: Python SUCCESS (install, Ruff, pytest).
+- CI GitHub Actions: Web SUCCESS (npm install, Next.js build).
+- API Research com Live desabilitado.
+- Risk Engine com veto e WAIT.
+- Frontend-base criado.
+
 ## Próximo checkpoint
-Validar scaffold, testes mínimos e contratos; então iniciar F1.
+Iniciar F1: fontes gratuitas, catálogo de dados, conectores macro/COT e primeira persistência reproduzível.
