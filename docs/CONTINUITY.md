@@ -23,9 +23,9 @@ F4 Structure/Volume/Volatility — CONCLUÍDA (CI verde)
 F5 Macro/Intermarket/Positioning/Event — CONCLUÍDA (CI verde)
 F6 Regime/baseline — CONCLUÍDA (CI verde)
 F7 Quant/ML foundation — CONCLUÍDA (CI verde)
-F8 Backtest/walk-forward — IMPLEMENTADA; CI pendente
-F9 Replay/journal — IMPLEMENTADA; CI pendente
-F10 Decision + AI Analyst — IMPLEMENTADA; CI pendente
+F8 Backtest/walk-forward — CONCLUÍDA (CI verde)
+F9 Replay/journal — CONCLUÍDA (CI verde)
+F10 Decision + AI Analyst — CONCLUÍDA (CI verde)
 F11 Walk-forward/paper ao vivo — PENDENTE
 F12 Level 2 — PENDENTE
 F13 MBO A/B — PENDENTE
@@ -69,3 +69,8 @@ Implementados macro/intermarket, COT positioning, event risk, regime detector, f
 
 ## F8/F9/F10 — 19/09/2026
 Backtest com custos/slippage e métricas, walk-forward temporal, replay por available_at, decision log/journal, TradeThesis e AI Analyst explicável implementados. Evento/veto força WAIT; probabilidade continua não calibrada.
+
+## Evidência F8/F9/F10
+- Python CI SUCCESS: Ruff + pytest.
+- Web CI SUCCESS.
+- Próximo bloco: Risk Engine avançado + Paper Trading + validação paper.
