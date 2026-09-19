@@ -18,8 +18,8 @@ Branch: terminal/f3-f4-2026-09-19
 F0 Fundação — CONCLUÍDA (CI Python + Web verde)
 F1 Dados gratuitos — CONCLUÍDA (CI verde)
 F2 Data/feature store — CONCLUÍDA (CI verde)
-F3 Terminal — IMPLEMENTADA; CI pendente
-F4 Structure/Volume/Volatility — IMPLEMENTADA; CI pendente
+F3 Terminal — CONCLUÍDA (CI verde)
+F4 Structure/Volume/Volatility — CONCLUÍDA (CI verde)
 F5 Macro/Intermarket/Positioning/Event — PENDENTE
 F6 Regime/baseline — PENDENTE
 F7 Backtest causal — PENDENTE
@@ -53,3 +53,8 @@ Implementados catálogo macro/intermarket, cliente FRED, adapter CFTC, validaç�
 
 ## F3/F4 — 19/09/2026
 Terminal profissional base para NQ/MNQ/GC/MGC implementado, com estados explícitos de feed, Decision/Risk e níveis. Market Engine implementa VWAP, ATR, realized volatility, range position, trend baseline, Volume Profile POC/VAH/VAL e session levels. Sem feed, UI permanece OFFLINE/WAIT e não inventa preços.
+
+## Evidência F3/F4
+- Python: SUCCESS (Ruff + pytest).
+- Web: SUCCESS (Next.js production build).
+- Próxima fase: F5 Macro/Intermarket/Positioning/Event.
