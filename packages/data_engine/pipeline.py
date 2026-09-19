@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from packages.data_engine.fred import FredClient
@@ -10,7 +10,7 @@ def ingest_fred_series(client: FredClient, series_id: str, root: Path) -> Path:
     # FRED observation date and release availability are distinct concepts.
     # Until a point-in-time release timestamp is supplied, available_at is the
     # ingestion timestamp; this prevents pretending data was known earlier.
-    ingested_at = datetime.now(timezone.utc)
+    ingested_at = datetime.now(UTC)
     rows = [
         {
             "observed_at": o.observed_at,
