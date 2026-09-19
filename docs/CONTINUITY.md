@@ -1,8 +1,8 @@
 # QuantPro Terminal — Continuável
 
 Data: 2026-09-19
-Versão: 0.4
-Branch: data/f1-f2-2026-09-19
+Versão: 0.5
+Branch: terminal/f3-f4-2026-09-19
 
 ## Decisões canônicas
 - Projeto independente da ALEFVIA.
@@ -18,8 +18,8 @@ Branch: data/f1-f2-2026-09-19
 F0 Fundação — CONCLUÍDA (CI Python + Web verde)
 F1 Dados gratuitos — CONCLUÍDA (CI verde)
 F2 Data/feature store — CONCLUÍDA (CI verde)
-F3 Terminal — PENDENTE
-F4 Structure/Volume/Volatility — PENDENTE
+F3 Terminal — IMPLEMENTADA; CI pendente
+F4 Structure/Volume/Volatility — IMPLEMENTADA; CI pendente
 F5 Macro/Intermarket/Positioning/Event — PENDENTE
 F6 Regime/baseline — PENDENTE
 F7 Backtest causal — PENDENTE
@@ -50,3 +50,6 @@ Implementados catálogo macro/intermarket, cliente FRED, adapter CFTC, validaç�
 - Web CI SUCCESS (Next.js build).
 - Testes incluem anti-look-ahead point-in-time e round-trip Parquet.
 - Próxima fase: F3 Terminal com dados/estado dos conectores.
+
+## F3/F4 — 19/09/2026
+Terminal profissional base para NQ/MNQ/GC/MGC implementado, com estados explícitos de feed, Decision/Risk e níveis. Market Engine implementa VWAP, ATR, realized volatility, range position, trend baseline, Volume Profile POC/VAH/VAL e session levels. Sem feed, UI permanece OFFLINE/WAIT e não inventa preços.
