@@ -29,7 +29,7 @@ F10 Decision + AI Analyst — CONCLUÍDA (CI verde)
 F11 Risk avançado — CONCLUÍDA (CI verde)
 F12 Paper Trading — CONCLUÍDA (CI verde)
 F13 Data provider/Level 2 readiness — CONCLUÍDA (CI verde)
-F14 MBO A/B framework — IMPLEMENTADA; evidência externa pendente\nF15 Live eligibility gate — IMPLEMENTADA; LIVE BLOQUEADO até evidência + autorização\nF16 Monitoring/Governance — IMPLEMENTADA; CI pendente
+F14 MBO A/B framework — CONCLUÍDA NO SOFTWARE; validação MBO real pendente\nF15 Live eligibility gate — IMPLEMENTADA; LIVE BLOQUEADO até evidência + autorização\nF16 Monitoring/Governance — CONCLUÍDA (CI verde)
 
 ## Evidência F0
 - CI GitHub Actions: Python SUCCESS (install, Ruff, pytest).
@@ -86,3 +86,8 @@ F11 Risk avançado, F12 Paper Trading e F13 camada provider-neutral para dados a
 
 ## F14/F15/F16 — 19/09/2026
 Framework MBO A/B, maturidade/promoção, gate determinístico de elegibilidade Live, drift/performance monitoring e audit log implementados. O software pode ser finalizado; validação de mercado continua dependente de feed licenciado, amostras OOS/Paper reais e autorização humana explícita. Nenhuma operação Live foi ativada.
+
+## Evidência final de software
+- Python CI SUCCESS (Ruff + pytest).
+- Web CI SUCCESS (Next.js build).
+- F0–F16: implementação de software concluída conforme escopo; gates externos permanecem obrigatórios.
