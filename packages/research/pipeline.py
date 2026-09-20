@@ -18,7 +18,7 @@ def run_research(
     feature_names: list[str],
     *,
     target: str = "future_return",
-    costs: CostModel = CostModel(),
+    costs: CostModel | None = None,
 ) -> ResearchRun:
     candidates = discover_binary_patterns(
         feature_rows,
@@ -28,5 +28,5 @@ def run_research(
         max_features=min(4, len(feature_names)),
         min_occurrences=30,
     )
-    validation = evaluate(trades, costs)
+    validation = evaluate(trades, costs or CostModel())
     return ResearchRun(candidates, validation, False)
