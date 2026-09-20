@@ -1,8 +1,8 @@
 # QuantPro Terminal — Continuável
 
 Data: 2026-09-19
-Versão: 0.8
-Branch: paper/f11-f13-2026-09-19
+Versão: 1.0
+Branch: final/f14-f16-2026-09-19
 
 ## Decisões canônicas
 - Projeto independente da ALEFVIA.
@@ -26,10 +26,10 @@ F7 Quant/ML foundation — CONCLUÍDA (CI verde)
 F8 Backtest/walk-forward — CONCLUÍDA (CI verde)
 F9 Replay/journal — CONCLUÍDA (CI verde)
 F10 Decision + AI Analyst — CONCLUÍDA (CI verde)
-F11 Walk-forward/paper ao vivo — PENDENTE
-F12 Level 2 — PENDENTE
-F13 MBO A/B — PENDENTE
-F14 Live — BLOQUEADO
+F11 Risk avançado — CONCLUÍDA (CI verde)
+F12 Paper Trading — CONCLUÍDA (CI verde)
+F13 Data provider/Level 2 readiness — CONCLUÍDA (CI verde)
+F14 MBO A/B framework — CONCLUÍDA NO SOFTWARE; validação MBO real pendente\nF15 Live eligibility gate — IMPLEMENTADA; LIVE BLOQUEADO até evidência + autorização\nF16 Monitoring/Governance — CONCLUÍDA (CI verde)
 
 ## Evidência F0
 - CI GitHub Actions: Python SUCCESS (install, Ruff, pytest).
@@ -83,3 +83,11 @@ F11 Risk avançado, F12 Paper Trading e F13 camada provider-neutral para dados a
 - Web CI SUCCESS.
 - Live trading permanece desabilitado.
 - Próximo checkpoint: selecionar/conectar feed real permitido e validar Paper com dados reais antes de qualquer promoção.
+
+## F14/F15/F16 — 19/09/2026
+Framework MBO A/B, maturidade/promoção, gate determinístico de elegibilidade Live, drift/performance monitoring e audit log implementados. O software pode ser finalizado; validação de mercado continua dependente de feed licenciado, amostras OOS/Paper reais e autorização humana explícita. Nenhuma operação Live foi ativada.
+
+## Evidência final de software
+- Python CI SUCCESS (Ruff + pytest).
+- Web CI SUCCESS (Next.js build).
+- F0–F16: implementação de software concluída conforme escopo; gates externos permanecem obrigatórios.
