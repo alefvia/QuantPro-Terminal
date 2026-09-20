@@ -1,29 +1,14 @@
-const instruments = [
-  { symbol: "NQ", name: "Nasdaq-100 E-mini" },
-  { symbol: "MNQ", name: "Nasdaq-100 Micro" },
-  { symbol: "GC", name: "Gold" },
-  { symbol: "MGC", name: "Micro Gold" },
-];
-const engines = ["Structure","VWAP","Volume Profile","ATR / Volatility","Macro","Intermarket","Positioning","Events","Regime","Quant / ML"];
-const levels = ["VWAP","POC","VAH","VAL","Prev. High","Prev. Low","Overnight High","Overnight Low","Opening Range"];
-
-export default function Home() {
-  return <main>
-    <header><div><p className="eyebrow">QUANTPRO · PROFESSIONAL RESEARCH TERMINAL</p><h1>Market Intelligence</h1></div><div className="badges"><span className="badge">RESEARCH</span><span className="danger">LIVE BLOQUEADO</span></div></header>
-    <nav>{instruments.map(x=><button key={x.symbol}><b>{x.symbol}</b><small>{x.name}</small></button>)}</nav>
-    <section className="terminal">
-      <div className="chart">
-        <div className="sectionHead"><div><p className="label">NQ · MARKET STRUCTURE</p><h2>Feed de futuros aguardando conexão</h2></div><span className="offline">OFFLINE</span></div>
-        <div className="placeholder"><div className="bars"/><p>Nenhum preço é fabricado. O gráfico será ativado quando houver um feed permitido.</p></div>
-        <div className="levels">{levels.map(x=><div key={x}><span>{x}</span><b>—</b></div>)}</div>
-      </div>
-      <aside>
-        <p className="label">DECISION ENGINE</p><strong className="wait">WAIT</strong>
-        <p>Sem dados de mercado suficientes para decisão.</p>
-        <hr/><p className="label">RISK ENGINE</p><b>VETO ATIVO</b><p>Data quality gate impede operação sem dados.</p>
-        <hr/><p className="label">PROBABILIDADE</p><b>INDISPONÍVEL</b><p>Somente após calibração out-of-sample.</p>
-      </aside>
-    </section>
-    <section><div className="sectionHead"><h2>Motores</h2><span className="muted">F3/F4</span></div><div className="grid">{engines.map((x,i)=><article key={x}><span>{x}</span><b className={i<4?"ready":"pending"}>{i<4?"READY":"PENDING"}</b></article>)}</div></section>
-  </main>
-}
+const instruments=[["NQ","Nasdaq E-mini"],["MNQ","Nasdaq Micro"],["GC","Gold"],["MGC","Micro Gold"]];
+const desks=[["Order Flow","Footprint · CVD · Imbalance"],["Liquidity","DOM · Add/Pull · Absorption"],["Market Structure","VWAP · Profile · Sessions"],["Regime","Volatility · Trend · Range"],["Macro","Rates · USD · Events"],["Intermarket","NQ · Gold · Yields"],["Quant Models","Ensemble · Calibration"],["Risk","Sizing · Limits · Kill switch"]];
+const metrics=["VWAP","POC","VAH","VAL","CVD","DOM Imbalance","Absorption","Liquidity"];
+export default function Home(){return <main>
+<header><div><p className="eyebrow">QUANTPRO · INSTITUTIONAL RESEARCH WORKSTATION</p><h1>Trading Desk</h1><p className="sub">Decision intelligence · Order Flow · Liquidity · Quant · Risk</p></div><div className="badges"><span className="badge">RESEARCH</span><span className="danger">LIVE LOCKED</span></div></header>
+<nav>{instruments.map(([s,n],i)=><button className={i===0?"active":""} key={s}><b>{s}</b><small>{n}</small><span>—</span></button>)}</nav>
+<section className="status"><div><span>MARKET DATA</span><b className="red">OFFLINE</b></div><div><span>SESSION</span><b>19:00–22:00 BRT</b></div><div><span>DATA QUALITY</span><b className="amber">BLOCKED</b></div><div><span>EXECUTION</span><b className="red">DISABLED</b></div></section>
+<section className="workspace">
+<div className="chart panel"><div className="sectionHead"><div><p className="label">NQ · MARKET STRUCTURE / ORDER FLOW</p><h2>Market feed awaiting connection</h2></div><span className="offline">OFFLINE</span></div><div className="placeholder"><div className="depth"><i/><i/><i/><i/><i/><i/><i/><i/><i/></div><strong>NO MARKET DATA</strong><p>Prices and institutional metrics are never fabricated.</p></div><div className="metricGrid">{metrics.map(x=><div key={x}><span>{x}</span><b>—</b></div>)}</div></div>
+<aside className="panel"><p className="label">DECISION ENGINE</p><strong className="wait">WAIT</strong><p className="reason">Insufficient verified evidence.</p><div className="divider"/><p className="label">TRADE PLAN</p>{["Entry","Invalidation","Stop","Target 1","Target 2"].map(x=><div className="row" key={x}><span>{x}</span><b>—</b></div>)}<div className="divider"/><p className="label">RISK ENGINE</p><b className="red">VETO ACTIVE</b><p>Data-quality gate blocks orders.</p><div className="divider"/><p className="label">CALIBRATED PROBABILITY</p><b>UNAVAILABLE</b><p>Enabled only after OOS evidence.</p></aside>
+</section>
+<section><div className="sectionHead"><div><p className="label">ANALYTICS STACK</p><h2>Institutional intelligence layers</h2></div><span className="muted">QuantPro V2</span></div><div className="deskGrid">{desks.map(([a,b],i)=><article key={a}><div><b>{a}</b><small>{b}</small></div><span className={i<4?"ready":"standby"}>{i<4?"READY":"STANDBY"}</span></article>)}</div></section>
+<footer>Research environment · No broker orders · Real-money execution remains locked</footer>
+</main>}
