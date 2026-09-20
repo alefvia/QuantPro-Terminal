@@ -1,5 +1,4 @@
 from datetime import UTC,datetime
-import pytest
 from packages.data_engine.databento_historical import DEFAULT_SYMBOLS,HistoricalRequest
 
 def test_default_products_are_target_markets():
