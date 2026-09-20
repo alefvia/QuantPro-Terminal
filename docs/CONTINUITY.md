@@ -76,4 +76,10 @@ Backtest com custos/slippage e métricas, walk-forward temporal, replay por avai
 - Próximo bloco: Risk Engine avançado + Paper Trading + validação paper.
 
 ## F11/F12/F13 — 19/09/2026
-F11 Risk avançado, F12 Paper Trading e F13 camada provider-neutral para dados avançados implementados. Gates: kill switch, qualidade, evento, perda diária, drawdown, sequência de perdas, R:R, sizing; fills paper com slippage/fees; validação paper; contratos Level 2/MBO e gate de licença/realtime. CI pendente.
+F11 Risk avançado, F12 Paper Trading e F13 camada provider-neutral para dados avançados implementados. Gates: kill switch, qualidade, evento, perda diária, drawdown, sequência de perdas, R:R, sizing; fills paper com slippage/fees; validação paper; contratos Level 2/MBO e gate de licença/realtime. CI verde: Python/Ruff/Pytest e Web/Next.js SUCCESS.
+
+## Evidência F11/F12/F13
+- Python CI SUCCESS.
+- Web CI SUCCESS.
+- Live trading permanece desabilitado.
+- Próximo checkpoint: selecionar/conectar feed real permitido e validar Paper com dados reais antes de qualquer promoção.
