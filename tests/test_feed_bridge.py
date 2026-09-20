@@ -15,7 +15,7 @@ def test_store_rejects_bad_symbol_and_naive_time():
     except ValueError:
         pass
     try:
-        s.ingest(FeedPacket("NQ","trade",datetime.now(),1,1,"ask"))
+        s.ingest(FeedPacket("NQ","trade",datetime(2026,9,20,1,0),1,1,"ask"))
         assert False
     except ValueError:
         pass
