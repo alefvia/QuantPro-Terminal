@@ -24,15 +24,15 @@ def test_macro_surprise_is_actual_minus_consensus():
 
 def test_response_v2_requires_volume_imbalance_and_response():
     result = assess_response_v2(
-        bid_volume=Decimal("100"),
-        ask_volume=Decimal("20"),
-        start=Decimal("100"),
+        bid_volume=Decimal(100),
+        ask_volume=Decimal(20),
+        start=Decimal(100),
         end=Decimal("100.25"),
         tick_size=Decimal("0.25"),
-        volume_threshold=Decimal("50"),
+        volume_threshold=Decimal(50),
     )
     assert result.absorption_bid
-    assert result.price_response_ticks == Decimal("1")
+    assert result.price_response_ticks == Decimal(1)
 
 
 def test_setup_catalog_matches_only_complete_evidence():
@@ -46,10 +46,7 @@ def test_setup_catalog_matches_only_complete_evidence():
 
 
 def test_discovery_enforces_minimum_occurrences():
-    rows = [
-        {"a": True, "b": True, "future": 1.0}
-        for _ in range(35)
-    ]
+    rows = [{"a": True, "b": True, "future": 1.0} for _ in range(35)]
     found = discover_binary_patterns(
         rows,
         feature_names=["a", "b"],
