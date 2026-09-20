@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from threading import RLock
-from typing import Literal
+from typing import ClassVar, Literal
 
 Side=Literal["bid","ask"]
 Kind=Literal["trade","quote","depth"]
@@ -16,7 +16,7 @@ class FeedPacket:
     side: Side | None=None
 
 class MarketStateStore:
-    allowed={"NQ","MNQ","GC","MGC"}
+    allowed: ClassVar[set[str]]={"NQ","MNQ","GC","MGC"}
     def __init__(self):
         self._lock=RLock()
         self._last={}
