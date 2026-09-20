@@ -1,8 +1,8 @@
 from typing import Literal
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel\nfrom services.api.feed import router as feed_router
 
-app = FastAPI(title="QuantPro API", version="0.3.0")
+app = FastAPI(title="QuantPro API", version="0.4.0")\napp.include_router(feed_router)
 
 class SystemStatus(BaseModel):
     environment: Literal["research","paper","live"]
