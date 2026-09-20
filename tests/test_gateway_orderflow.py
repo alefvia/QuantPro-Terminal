@@ -14,7 +14,7 @@ def test_delta_and_depth():
     engine.ingest(ev("depth", "bid", "12", "99.75"))
     engine.ingest(ev("depth", "ask", "8", "100.25"))
     snap = engine.snapshot()
-    assert snap.delta == Decimal("3")
+    assert snap.delta == Decimal(3)
     assert snap.depth_imbalance == Decimal("0.2")
 
 def test_realtime_is_fail_closed():
