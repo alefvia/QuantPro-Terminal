@@ -1,11 +1,10 @@
 """Rithmic R|Protocol integration boundary for MNQ.
 
-This module intentionally contains no unofficial wire implementation and no credentials.
-The official R|Protocol Dev Kit supplies protobuf schemas, endpoints and application
-identifiers. Until those artifacts are available, the adapter fails closed.
+Prepared against the official R|Protocol 0.90.0.0 package supplied by Rithmic.
+No credentials or vendor protobuf sources are committed here.
 
-Confirmed research target: front-month MNQ on CME. Symbol resolution must come from
-Rithmic reference data rather than a hard-coded contract month.
+The approved development environment is Rithmic Test. Contract resolution must
+use Rithmic reference/front-month data rather than a hard-coded expiry.
 """
 
 from collections.abc import AsyncIterator
@@ -18,26 +17,33 @@ from packages.data_engine.gateway import FeedCapabilities, MarketEvent, validate
 
 @dataclass(frozen=True)
 class RithmicSettings:
-    system_name: str = "Rithmic Paper Trading"
+    system_name: str = "Rithmic Test"
     exchange: str = "CME"
     root_symbol: str = "MNQ"
-    app_name: str | None = None
-    app_version: str | None = None
+    app_name: str = "QuantPro"
+    app_version: str = "0.1.0"
     websocket_url: str | None = None
 
     @property
     def devkit_ready(self) -> bool:
-        return bool(self.app_name and self.app_version and self.websocket_url)
+        return bool(
+            self.system_name == "Rithmic Test"
+            and self.app_name
+            and self.app_version
+            and self.websocket_url
+            and self.websocket_url.startswith("wss://")
+        )
 
 
 class RithmicProtocolAdapter:
-    """Provider adapter prepared for the official R|Protocol Dev Kit."""
+    """Provider boundary for the official R|Protocol ticker-plant connection."""
 
     name = "rithmic-r-protocol"
 
     def __init__(self, settings: RithmicSettings | None = None) -> None:
         self.settings = settings or RithmicSettings()
-        # Do not claim MBO until the entitlement is verified programmatically.
+        # API package confirms message support for trades, BBO and order book.
+        # MBO entitlement still requires an authenticated runtime test.
         self.capabilities = FeedCapabilities(
             trades=True,
             quotes=True,
@@ -49,16 +55,16 @@ class RithmicProtocolAdapter:
     def assert_connectable(self) -> None:
         if not self.settings.devkit_ready:
             raise RuntimeError(
-                "Rithmic Dev Kit configuration is pending; refusing to invent endpoints "
-                "or connect with incomplete credentials."
+                "Rithmic Test connection metadata is incomplete; refusing to guess "
+                "or use a non-TLS endpoint."
             )
         validate_orderflow_feed(self.capabilities, realtime=True)
 
     async def events(self) -> AsyncIterator[MarketEvent]:
         self.assert_connectable()
         raise RuntimeError(
-            "Official R|Protocol protobuf bindings are not installed yet. "
-            "Install the Dev Kit artifacts before enabling ingestion."
+            "R|Protocol 0.90.0.0 bindings must be supplied at deployment/runtime "
+            "before WebSocket ingestion can start."
         )
         yield  # pragma: no cover
 
@@ -71,7 +77,6 @@ def normalize_trade(
     size: Decimal,
     aggressor: str,
 ) -> MarketEvent:
-    """Normalize a Rithmic trade into QuantPro's provider-neutral event."""
     if observed_at.tzinfo is None:
         raise ValueError("Rithmic timestamps must be timezone-aware")
     side = {"buy": "ask", "sell": "bid"}.get(aggressor.lower(), "unknown")
@@ -87,7 +92,6 @@ def normalize_depth(
     side: str,
     level: int | None = None,
 ) -> MarketEvent:
-    """Normalize one MBP/depth level. Size zero removes the level downstream."""
     if observed_at.tzinfo is None:
         raise ValueError("Rithmic timestamps must be timezone-aware")
     normalized_side = side.lower()
