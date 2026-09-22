@@ -1,47 +1,50 @@
 # Rithmic MNQ integration
 
-Status: **adapter prepared; official Dev Kit/access pending**.
+Status: **official R|Protocol 0.90.0.0 package received; runtime credential injection and authenticated test pending**.
 
-## Scope
+## Confirmed from the supplied official package
 
-QuantPro will connect only the CME Micro E-mini Nasdaq-100 path first. The contract
-must be resolved from Rithmic reference data/front-month metadata instead of being
-hard-coded, so rollover does not silently leave the system on an expired contract.
+The package contains the reference guide, Protocol Buffer definitions and working
+Python/JavaScript samples. The market-data protocol explicitly supports last trade,
+best bid/offer and order book subscriptions. It also includes Depth-by-Order snapshot
+and update request/response definitions, so the protocol has an MBO path; actual user
+entitlement still must be verified after authentication.
 
-Pipeline:
+The approved development system is **Rithmic Test**. The server requires secure
+WebSocket (WSS). Credentials are intentionally not stored in this repository.
 
-`R|Protocol WebSocket/protobuf -> Rithmic adapter -> MarketEvent -> Order Flow -> Decision/Risk`
+## MNQ-only pipeline
 
-## Evidence already obtained
+`R|Protocol Ticker Plant -> MNQ trades/BBO/order book -> MarketEvent -> Order Flow -> Decision/Risk`
 
-The R|Trader Pro paper environment has been manually observed receiving MNQ quotes
-and multi-level DOM/market depth. This is evidence for the account/UI entitlement,
-not proof that the API entitlement or MBO stream is enabled.
+The active MNQ contract will be resolved using the protocol's front-month/reference
+messages instead of hard-coding a contract month.
 
-## Safety / secrets
+## Connection sequence
 
-- Never commit username, password, API credentials, endpoints supplied under the Dev Kit,
-  or screenshots containing account identifiers.
-- Environment/runtime secrets only.
-- Live order routing remains disabled.
-- MBO remains unclaimed until verified through the API.
-- No unofficial endpoint is guessed.
-- Adapter fails closed until app name, app version and WebSocket URL are supplied from
-  the official Rithmic developer material.
+1. Open WSS and request Rithmic system information.
+2. Close that discovery connection as directed by Rithmic.
+3. Open a new WSS connection.
+4. Login to **Rithmic Test** using the Ticker Plant infrastructure.
+5. Resolve the current MNQ front-month contract/reference data.
+6. Subscribe to LAST_TRADE + BBO + ORDER_BOOK.
+7. Normalize and persist every accepted event before feature calculation.
+8. Maintain heartbeat/reconnect handling and fail closed on gaps.
+9. Test Depth-by-Order separately; enable MBO features only if entitlement is confirmed.
 
-## Dev Kit handoff
+## Deployment secrets
 
-When Rithmic supplies the Protocol kit:
+Runtime only:
+- API user
+- API password
+- approved WSS endpoint
 
-1. Add the official protobuf definitions/bindings according to its license.
-2. Configure application name/version and approved WebSocket endpoint as secrets.
-3. Authenticate in the approved test/paper environment.
-4. Resolve the active MNQ contract through reference data.
-5. Subscribe to last trades, bid/ask and order book/depth.
-6. Preserve Rithmic sequence/update semantics and rebuild snapshots atomically.
-7. Map trades/depth into `MarketEvent`.
-8. Record raw normalized events before feature calculation for deterministic replay.
-9. Verify reconnect/gap detection and fail closed on sequence loss.
-10. Separately test MBO entitlement before enabling Level-3 features.
+Never commit credentials, screenshots with identifiers, or vendor-licensed protocol
+sources unless their license explicitly permits repository redistribution.
 
-No production/live trading promotion is authorized by this integration.
+## Current gate
+
+The adapter and protocol mapping can now be implemented without guessing. The next
+external action is to inject the user's API credentials into a secure runtime secret
+store and perform the first authenticated **Rithmic Test** connection. Live order
+routing remains disabled.
