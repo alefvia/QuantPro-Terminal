@@ -16,7 +16,7 @@ dependencies = [
   "scikit-learn>=1.5",
   "httpx>=0.27",
   "websockets>=13,<16",
-  "protobuf>=5,<7"
+  "protobuf>=3.20,<4"
 ]
 
 [project.optional-dependencies]
