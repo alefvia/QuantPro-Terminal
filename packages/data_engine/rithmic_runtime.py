@@ -15,7 +15,7 @@ class RithmicRuntimeConfig:
     user: str
     password: str
     websocket_url: str
-    proto_python_dir: Path
+    kit_dir: Path
     system_name: str = "Rithmic Test"
     exchange: str = "CME"
     root_symbol: str = "MNQ"
@@ -26,7 +26,7 @@ class RithmicRuntimeConfig:
             "RITHMIC_API_USER": os.getenv("RITHMIC_API_USER"),
             "RITHMIC_API_PASSWORD": os.getenv("RITHMIC_API_PASSWORD"),
             "RITHMIC_WSS_URL": os.getenv("RITHMIC_WSS_URL"),
-            "RITHMIC_PROTO_PY_DIR": os.getenv("RITHMIC_PROTO_PY_DIR"),
+            "RITHMIC_KIT_DIR": os.getenv("RITHMIC_KIT_DIR"),
         }
         missing = [name for name, value in required.items() if not value]
         if missing:
@@ -38,5 +38,5 @@ class RithmicRuntimeConfig:
             user=str(required["RITHMIC_API_USER"]),
             password=str(required["RITHMIC_API_PASSWORD"]),
             websocket_url=url,
-            proto_python_dir=Path(str(required["RITHMIC_PROTO_PY_DIR"])),
+            kit_dir=Path(str(required["RITHMIC_KIT_DIR"])),
         )
