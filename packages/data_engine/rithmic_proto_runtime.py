@@ -28,6 +28,8 @@ _REQUIRED = (
     "request_depth_by_order_updates.proto",
     "response_depth_by_order_updates.proto",
     "depth_by_order.proto",
+    "request_list_exchange_permissions.proto",
+    "response_list_exchange_permissions.proto",
 )
 
 

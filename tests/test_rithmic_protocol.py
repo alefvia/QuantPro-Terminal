@@ -13,7 +13,7 @@ from packages.data_engine.rithmic_protocol import (
 
 def test_rithmic_adapter_fails_closed_without_devkit():
     adapter = RithmicProtocolAdapter()
-    with pytest.raises(RuntimeError, match="Dev Kit"):
+    with pytest.raises(RuntimeError, match="Rithmic Test connection metadata is incomplete"):
         adapter.assert_connectable()
 
 

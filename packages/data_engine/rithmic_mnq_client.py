@@ -35,6 +35,8 @@ class RithmicMNQClient:
         self.last_trade_pb = importlib.import_module("last_trade_pb2")
         self.bbo_pb = importlib.import_module("best_bid_offer_pb2")
         self.order_book_pb = importlib.import_module("order_book_pb2")
+        self.exchange_permissions_pb = importlib.import_module("request_list_exchange_permissions_pb2")
+        self.exchange_permissions_response_pb = importlib.import_module("response_list_exchange_permissions_pb2")
 
     async def _login(self, ws) -> int:
         rq = self.login_pb.RequestLogin()
@@ -53,6 +55,36 @@ class RithmicMNQClient:
         if not rp.rp_code or rp.rp_code[0] != "0":
             raise RuntimeError(f"Rithmic login rejected: {list(rp.rp_code)}")
         return int(rp.heartbeat_interval or 10)
+
+    async def _exchange_permissions(self, ws) -> dict:
+        correlation = "quantpro-exchange-permissions"
+
+        rq = self.exchange_permissions_pb.RequestListExchangePermissions()
+        rq.template_id = 154467
+        rq.user_msg.append(correlation)
+        await ws.send(rq.SerializeToString())
+
+        while True:
+            raw = await asyncio.wait_for(ws.recv(), timeout=15)
+            base = self.base.Base()
+            base.ParseFromString(raw)
+
+            if base.template_id != 154467:
+                continue
+
+            rp = self.exchange_permissions_response_pb.ResponseListExchangePermissions()
+            rp.ParseFromString(raw)
+
+            if correlation not in rp.user_msg:
+                continue
+
+            return {
+                "exchange": rp.exchange,
+                "level_1_market_data": rp.level_1_market_data,
+                "level_2_market_data": rp.level_2_market_data,
+                "rp_code": list(rp.rp_code),
+                "rq_handler_rp_code": list(rp.rq_handler_rp_code),
+            }
 
     async def _heartbeat(self, ws) -> None:
         rq = self.heartbeat_pb.RequestHeartbeat()
@@ -111,7 +143,7 @@ class RithmicMNQClient:
                             raw = await asyncio.wait_for(
                                 ws.recv(), timeout=max(1, heartbeat_seconds)
                             )
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             await self._heartbeat(ws)
                             continue
 
@@ -127,12 +159,18 @@ class RithmicMNQClient:
                         elif base.template_id == 150:
                             msg = self.last_trade_pb.LastTrade()
                             msg.ParseFromString(raw)
-                            aggressor = (
-                                "buy"
-                                if msg.aggressor
+                            if (
+                                msg.aggressor
                                 == self.last_trade_pb.LastTrade.TransactionType.BUY
-                                else "sell"
-                            )
+                            ):
+                                aggressor = "buy"
+                            elif (
+                                msg.aggressor
+                                == self.last_trade_pb.LastTrade.TransactionType.SELL
+                            ):
+                                aggressor = "sell"
+                            else:
+                                aggressor = "unknown"
                             yield normalize_trade(
                                 symbol=msg.symbol,
                                 observed_at=datetime.fromtimestamp(
@@ -142,6 +180,30 @@ class RithmicMNQClient:
                                 size=Decimal(msg.trade_size_64),
                                 aggressor=aggressor,
                             )
+                        elif base.template_id == 151:
+                            msg = self.bbo_pb.BestBidOffer()
+                            msg.ParseFromString(raw)
+                            observed_at = datetime.fromtimestamp(
+                                msg.ssboe + msg.usecs / 1_000_000, tz=UTC
+                            )
+                            if msg.HasField("bid_price") and msg.HasField("bid_size_64"):
+                                yield normalize_depth(
+                                    symbol=msg.symbol,
+                                    observed_at=observed_at,
+                                    price=Decimal(str(msg.bid_price)),
+                                    size=Decimal(msg.bid_size_64),
+                                    side="bid",
+                                    level=1,
+                                )
+                            if msg.HasField("ask_price") and msg.HasField("ask_size_64"):
+                                yield normalize_depth(
+                                    symbol=msg.symbol,
+                                    observed_at=observed_at,
+                                    price=Decimal(str(msg.ask_price)),
+                                    size=Decimal(msg.ask_size_64),
+                                    side="ask",
+                                    level=1,
+                                )
                         elif base.template_id == 156:
                             msg = self.order_book_pb.OrderBook()
                             msg.ParseFromString(raw)
@@ -172,7 +234,7 @@ class RithmicMNQClient:
                                 )
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception:  # noqa: BLE001
                 # Fail transiently, then reconnect. Persistent auth/entitlement errors
                 # remain visible to the supervisor through repeated health failures.
                 await asyncio.sleep(5)
