@@ -2,12 +2,14 @@
 
 import asyncio
 import json
+import logging
 
 from packages.data_engine.rithmic_mnq_client import RithmicMNQClient
 from packages.data_engine.rithmic_runtime import RithmicRuntimeConfig
 
 
 async def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     config = RithmicRuntimeConfig.from_env()
     client = RithmicMNQClient(config)
     async for event in client.stream():
