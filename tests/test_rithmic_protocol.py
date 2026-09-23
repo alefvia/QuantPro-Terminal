@@ -32,7 +32,7 @@ def test_trade_aggressor_normalization():
         symbol="MNQ",
         observed_at=datetime.now(UTC),
         price=Decimal("30000.25"),
-        size=Decimal("2"),
+        size=Decimal(2),
         aggressor="buy",
     )
     assert event.kind == "trade"
@@ -44,7 +44,7 @@ def test_depth_normalization():
         symbol="MNQ",
         observed_at=datetime.now(UTC),
         price=Decimal("30000.00"),
-        size=Decimal("8"),
+        size=Decimal(8),
         side="bid",
         level=1,
     )
@@ -54,11 +54,12 @@ def test_depth_normalization():
 
 
 def test_naive_timestamp_is_rejected():
+    naive = datetime.fromisoformat("2026-09-21T00:00:00")
     with pytest.raises(ValueError, match="timezone-aware"):
         normalize_depth(
             symbol="MNQ",
-            observed_at=datetime(2026, 9, 21),
-            price=Decimal("30000"),
-            size=Decimal("1"),
+            observed_at=naive,
+            price=Decimal(30000),
+            size=Decimal(1),
             side="ask",
         )
