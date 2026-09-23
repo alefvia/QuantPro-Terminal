@@ -9,6 +9,7 @@ import asyncio
 from datetime import UTC, datetime
 from decimal import Decimal
 import importlib
+import logging
 import sys
 
 import websockets
@@ -16,6 +17,9 @@ import websockets
 from packages.data_engine.rithmic_proto_runtime import compile_rithmic_protos
 from packages.data_engine.rithmic_protocol import normalize_depth, normalize_trade
 from packages.data_engine.rithmic_runtime import RithmicRuntimeConfig
+
+
+logger = logging.getLogger(__name__)
 
 
 class RithmicMNQClient:
@@ -54,7 +58,9 @@ class RithmicMNQClient:
         rp.ParseFromString(raw)
         if not rp.rp_code or rp.rp_code[0] != "0":
             raise RuntimeError(f"Rithmic login rejected: {list(rp.rp_code)}")
-        return int(rp.heartbeat_interval or 10)
+        heartbeat_seconds = int(rp.heartbeat_interval or 10)
+        logger.info("Rithmic Ticker Plant login accepted; heartbeat=%ss", heartbeat_seconds)
+        return heartbeat_seconds
 
     async def _exchange_permissions(self, ws) -> dict:
         correlation = "quantpro-exchange-permissions"
@@ -106,11 +112,13 @@ class RithmicMNQClient:
                 continue
             rp = self.front_response_pb.ResponseFrontMonthContract()
             rp.ParseFromString(raw)
-            if rp.rp_code and rp.rp_code[0] != "0":
+            if not rp.rp_code or rp.rp_code[0] != "0":
                 raise RuntimeError(f"Front-month lookup rejected: {list(rp.rp_code)}")
             if not rp.trading_symbol:
                 raise RuntimeError("Rithmic returned no MNQ front-month trading symbol")
-            return rp.trading_symbol, rp.trading_exchange or self.config.exchange
+            exchange = rp.trading_exchange or self.config.exchange
+            logger.info("Rithmic MNQ front month resolved: %s on %s", rp.trading_symbol, exchange)
+            return rp.trading_symbol, exchange
 
     async def _subscribe(self, ws, symbol: str, exchange: str) -> None:
         rq = self.market_pb.RequestMarketDataUpdate()
@@ -152,10 +160,11 @@ class RithmicMNQClient:
                         if base.template_id == 101:
                             rp = self.market_response_pb.ResponseMarketDataUpdate()
                             rp.ParseFromString(raw)
-                            if rp.rp_code and rp.rp_code[0] != "0":
+                            if not rp.rp_code or rp.rp_code[0] != "0":
                                 raise RuntimeError(
                                     f"Market-data subscription rejected: {list(rp.rp_code)}"
                                 )
+                            logger.info("Rithmic MNQ market-data subscription accepted")
                         elif base.template_id == 150:
                             msg = self.last_trade_pb.LastTrade()
                             msg.ParseFromString(raw)
