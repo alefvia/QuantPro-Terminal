@@ -243,7 +243,8 @@ class RithmicMNQClient:
                                 )
             except asyncio.CancelledError:
                 raise
-            except Exception:  # noqa: BLE001
+            except Exception:
                 # Fail transiently, then reconnect. Persistent auth/entitlement errors
                 # remain visible to the supervisor through repeated health failures.
+                logger.warning("Rithmic MNQ session ended; reconnecting", exc_info=True)
                 await asyncio.sleep(5)
