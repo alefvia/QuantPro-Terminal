@@ -111,7 +111,7 @@ class RithmicMNQClient:
                             raw = await asyncio.wait_for(
                                 ws.recv(), timeout=max(1, heartbeat_seconds)
                             )
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             await self._heartbeat(ws)
                             continue
 
@@ -172,7 +172,7 @@ class RithmicMNQClient:
                                 )
             except asyncio.CancelledError:
                 raise
-            except Exception:
-                # Fail transiently, then reconnect. Persistent auth/entitlement errors
-                # remain visible to the supervisor through repeated health failures.
+            except (OSError, RuntimeError, TimeoutError, websockets.WebSocketException):
+                # Transport/protocol failures reconnect after a short backoff.
+                # Authentication/entitlement failures remain visible via health monitoring.
                 await asyncio.sleep(5)
