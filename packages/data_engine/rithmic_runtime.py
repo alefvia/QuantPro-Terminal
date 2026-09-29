@@ -19,6 +19,7 @@ class RithmicRuntimeConfig:
     system_name: str = "Rithmic Test"
     exchange: str = "CME"
     root_symbol: str = "MNQ"
+    contract_symbol: str | None = None
 
     @classmethod
     def from_env(cls) -> "RithmicRuntimeConfig":
@@ -34,9 +35,11 @@ class RithmicRuntimeConfig:
         url = str(required["RITHMIC_WSS_URL"])
         if not url.startswith("wss://"):
             raise RuntimeError("RITHMIC_WSS_URL must use wss://")
+        contract_symbol = os.getenv("RITHMIC_CONTRACT_SYMBOL", "").strip() or None
         return cls(
             user=str(required["RITHMIC_API_USER"]),
             password=str(required["RITHMIC_API_PASSWORD"]),
             websocket_url=url,
             kit_dir=Path(str(required["RITHMIC_KIT_DIR"])),
+            contract_symbol=contract_symbol,
         )
