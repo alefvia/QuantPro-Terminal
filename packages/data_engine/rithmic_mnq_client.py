@@ -48,6 +48,7 @@ class RithmicMNQClient:
         rq.template_version = "5.55"
         rq.user = self.config.user
         rq.password = self.config.password
+        rq.user_msg.append("hello")
         rq.app_name = "QuantPro"
         rq.app_version = "0.1.0"
         rq.system_name = self.config.system_name
