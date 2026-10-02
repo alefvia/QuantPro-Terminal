@@ -3,13 +3,21 @@
 set -euo pipefail
 
 APP_DIR="/home/leviatalaia/QuantPro-Terminal"
-PYTHON_BIN="/home/leviatalaia/QuantPro-Terminal/.venv/bin/python"
+PYTHON_BIN="$APP_DIR/.venv/bin/python"
 CONFIG_DIR="/etc/quantpro"
 METADATA="http://metadata.google.internal/computeMetadata/v1"
+DEPLOY_BRANCH="sync/rithmic-vm-2026-09-23"
 
 if [ ! -x "$PYTHON_BIN" ]; then
   echo "QuantPro virtual environment not found: $PYTHON_BIN" >&2
   exit 1
+fi
+
+# Apply only the managed worker and API files. User work in every other file is preserved.
+if git -C "$APP_DIR" fetch --quiet origin "$DEPLOY_BRANCH"; then
+  git -C "$APP_DIR" checkout FETCH_HEAD -- services/rithmic_mnq_worker.py services/api/main.py
+else
+  echo "QuantPro managed code update skipped; services will use the installed version." >&2
 fi
 
 install -d -m 700 "$CONFIG_DIR"
@@ -32,8 +40,6 @@ read_secret() {
   printf '%s' "$response" | "$PYTHON_BIN" -c 'import base64,json,sys; print(base64.b64decode(json.load(sys.stdin)["payload"]["data"]).decode(), end="")'
 }
 
-# Build a root-readable configuration from Secret Manager at each boot.
-# It is never committed and is only readable by root on the VM.
 umask 077
 RITHMIC_USER="$(read_secret quantpro-rithmic-user)"
 RITHMIC_PASSWORD="$(read_secret quantpro-rithmic-password)"
@@ -85,6 +91,8 @@ UNIT
 
 systemctl daemon-reload
 systemctl enable --now quantpro-api.service
+systemctl restart quantpro-api.service
 systemctl enable --now quantpro-rithmic.service
+systemctl restart quantpro-rithmic.service
 
-echo "QuantPro services enabled. Rithmic credentials were loaded only from Secret Manager."
+echo "QuantPro services enabled. Managed code updated and Rithmic credentials loaded only from Secret Manager."
