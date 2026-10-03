@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 import sqlite3
 from collections import deque
 from datetime import datetime, timezone
@@ -19,6 +20,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["https://quant-pro-terminal.ve
 SYMBOLS = ("NQ", "MNQ", "GC", "MGC")
 RELAY_AUDIENCE = os.environ["QUANTPRO_RELAY_AUDIENCE"]
 VM_SERVICE_ACCOUNT = os.environ["QUANTPRO_VM_SERVICE_ACCOUNT"]
+HISTORY_IMPORT_TOKEN = os.getenv("QUANTPRO_HISTORY_IMPORT_TOKEN")
 MAX_EVENTS = 25_000
 DB_PATH = os.getenv("QUANTPRO_DB_PATH", "/tmp/quantpro_relay.sqlite3")
 state: dict[str, dict[str, Any]] = {symbol: {} for symbol in SYMBOLS}
@@ -33,6 +35,22 @@ class FeedEvent(BaseModel):
     size: float | None = None
     side: str | None = None
     level: int | None = None
+
+
+class HistoricalCandle(BaseModel):
+    time: int
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    source_symbol: str
+
+
+class HistoricalImport(BaseModel):
+    symbol: str
+    source: str
+    candles: list[HistoricalCandle]
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -74,6 +92,18 @@ def initialize_store() -> None:
                 ON market_events(symbol, observed_at DESC);
             CREATE INDEX IF NOT EXISTS idx_market_events_symbol_kind_time
                 ON market_events(symbol, kind, observed_at DESC);
+            CREATE TABLE IF NOT EXISTS historical_candles (
+                symbol TEXT NOT NULL,
+                time INTEGER NOT NULL,
+                open REAL NOT NULL,
+                high REAL NOT NULL,
+                low REAL NOT NULL,
+                close REAL NOT NULL,
+                volume REAL NOT NULL,
+                source_symbol TEXT NOT NULL,
+                source TEXT NOT NULL,
+                PRIMARY KEY (symbol, time)
+            );
             """
         )
 
@@ -112,6 +142,16 @@ def history_events(symbol: str, limit: int = 100_000) -> list[dict[str, Any]]:
     return [dict(row) for row in reversed(rows)]
 
 
+def history_candles(symbol: str) -> list[dict[str, Any]]:
+    with db() as connection:
+        rows = connection.execute(
+            "SELECT time, open, high, low, close, volume, source_symbol "
+            "FROM historical_candles WHERE symbol = ? ORDER BY time",
+            (symbol,),
+        ).fetchall()
+    return [dict(row) | {"buy_volume": 0.0, "sell_volume": 0.0} for row in rows]
+
+
 def apply_event(payload: dict[str, Any], persist: bool = True) -> None:
     symbol = payload["symbol"]
     state[symbol] = payload
@@ -136,8 +176,19 @@ def verify_vm_identity(authorization: str | None) -> None:
     if claims.get("email") != VM_SERVICE_ACCOUNT or not claims.get("email_verified"):
         raise HTTPException(status_code=403, detail="unexpected vm identity")
 
+
+def verify_history_import(token: str | None) -> None:
+    if not HISTORY_IMPORT_TOKEN or not token or not secrets.compare_digest(token, HISTORY_IMPORT_TOKEN):
+        raise HTTPException(status_code=403, detail="invalid history import token")
+
 def candles(symbol: str, seconds: int, limit: int) -> list[dict[str, Any]]:
     buckets: dict[int, dict[str, Any]] = {}
+    for event in history_candles(symbol):
+        stamp = int(event["time"])
+        key = stamp - (stamp % seconds)
+        candle = buckets.setdefault(key, {"time": key, "open": event["open"], "high": event["high"], "low": event["low"], "close": event["close"], "volume": 0.0, "buy_volume": 0.0, "sell_volume": 0.0})
+        candle["high"], candle["low"], candle["close"] = max(candle["high"], event["high"]), min(candle["low"], event["low"]), event["close"]
+        candle["volume"] += event["volume"]
     for event in history_events(symbol):
         if event["kind"] != "trade" or event.get("price") is None:
             continue
@@ -167,6 +218,27 @@ def ingest(event: FeedEvent, authorization: str | None = Header(default=None)) -
     payload = event.model_dump() | {"received_at": now_iso()}
     apply_event(payload)
     return {"status": "accepted"}
+
+
+@app.post("/terminal/import/ohlcv", status_code=202)
+def import_ohlcv(payload: HistoricalImport, x_quantpro_history_token: str | None = Header(default=None)) -> dict[str, Any]:
+    verify_history_import(x_quantpro_history_token)
+    symbol = payload.symbol.upper()
+    if symbol not in SYMBOLS:
+        raise HTTPException(status_code=422, detail="unsupported symbol")
+    if not payload.candles or len(payload.candles) > 4_000:
+        raise HTTPException(status_code=422, detail="send between 1 and 4000 candles per request")
+    rows = [
+        (symbol, candle.time, candle.open, candle.high, candle.low, candle.close, candle.volume, candle.source_symbol, payload.source)
+        for candle in payload.candles
+    ]
+    with db() as connection:
+        connection.executemany(
+            "INSERT OR REPLACE INTO historical_candles "
+            "(symbol, time, open, high, low, close, volume, source_symbol, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            rows,
+        )
+    return {"status": "accepted", "symbol": symbol, "imported": len(rows)}
 
 @app.get("/terminal/chart")
 def terminal_chart(symbol: str = "MNQ", timeframe: str = "1m", limit: int = Query(400, ge=1, le=800)) -> dict[str, Any]:
