@@ -1,17 +1,22 @@
 "use client";
 
+
 import { useEffect, useState } from "react";
+
 
 const RELAY = "https://quantpro-market-relay.onrender.com/terminal/state";
 const instruments = [["NQ", "Nasdaq E-mini"], ["MNQ", "Nasdaq Micro"], ["GC", "Gold"], ["MGC", "Micro Gold"]] as const;
 const desks = ["Order Flow", "Footprint", "CVD · Imbalance", "Liquidity", "DOM · Add/Pull", "Market Structure"];
 
+
 type Quote = { price?: number; observed_at?: string };
-type TerminalState = { state?: Record<string, Quote> };
+type TerminalState = { markets?: Array<Quote & { symbol: string }> };
+
 
 export default function Home() {
   const [data, setData] = useState<TerminalState>({});
   const [online, setOnline] = useState(false);
+
 
   useEffect(() => {
     let active = true;
@@ -20,7 +25,7 @@ export default function Home() {
         const response = await fetch(RELAY, { cache: "no-store" });
         if (!response.ok) throw new Error("relay unavailable");
         const next = await response.json();
-        if (active) { setData(next); setOnline(Boolean(next.state?.MNQ?.price)); }
+        if (active) { setData(next); setOnline(Boolean(next.markets?.some((quote: Quote & { symbol: string }) => quote.symbol === "MNQ" && quote.price != null))); }
       } catch { if (active) setOnline(false); }
     };
     load();
@@ -28,9 +33,11 @@ export default function Home() {
     return () => { active = false; window.clearInterval(timer); };
   }, []);
 
-  const mnq = data.state?.MNQ;
+
+  const mnq = data.markets?.find((quote) => quote.symbol === "MNQ");
   const price = mnq?.price ? mnq.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
   const updated = mnq?.observed_at ? new Date(mnq.observed_at).toLocaleTimeString("pt-BR") : "aguardando feed";
+
 
   return <main>
     <header><div><p className="eyebrow">QUANTPRO · INSTITUTIONAL RESEARCH WORKSTATION</p><h1>Trading Desk</h1><p className="sub">Pesquisa e leitura de mercado — sem execução de ordens</p></div><div className={online ? "status online" : "status"}>{online ? "● DADOS RITHMIC" : "● AGUARDANDO DADOS"}</div></header>
@@ -41,3 +48,4 @@ export default function Home() {
     <footer>Ambiente de pesquisa · Sem ordens de corretora · Execução em dinheiro real permanece bloqueada</footer>
   </main>;
 }
+
