@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from collections import deque
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Query
@@ -18,6 +20,7 @@ SYMBOLS = ("NQ", "MNQ", "GC", "MGC")
 RELAY_AUDIENCE = os.environ["QUANTPRO_RELAY_AUDIENCE"]
 VM_SERVICE_ACCOUNT = os.environ["QUANTPRO_VM_SERVICE_ACCOUNT"]
 MAX_EVENTS = 25_000
+DB_PATH = os.getenv("QUANTPRO_DB_PATH", "/tmp/quantpro_relay.sqlite3")
 state: dict[str, dict[str, Any]] = {symbol: {} for symbol in SYMBOLS}
 events: dict[str, deque[dict[str, Any]]] = {symbol: deque(maxlen=MAX_EVENTS) for symbol in SYMBOLS}
 book: dict[str, dict[str, dict[int, dict[str, Any]]]] = {symbol: {"bid": {}, "ask": {}} for symbol in SYMBOLS}
@@ -37,6 +40,92 @@ def now_iso() -> str:
 def event_time(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
 
+
+def db() -> sqlite3.Connection:
+    """Open the relay event store.
+
+    Set QUANTPRO_DB_PATH to a mounted persistent disk on Render. The default
+    deliberately remains local/ephemeral for development, rather than
+    claiming that an unmounted Render filesystem is durable.
+    """
+    path = Path(DB_PATH)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(path)
+    connection.row_factory = sqlite3.Row
+    return connection
+
+
+def initialize_store() -> None:
+    with db() as connection:
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS market_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                observed_at TEXT NOT NULL,
+                received_at TEXT NOT NULL,
+                price REAL,
+                size REAL,
+                side TEXT,
+                level INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_market_events_symbol_time
+                ON market_events(symbol, observed_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_market_events_symbol_kind_time
+                ON market_events(symbol, kind, observed_at DESC);
+            """
+        )
+
+
+@app.on_event("startup")
+def restore_relay_state() -> None:
+    initialize_store()
+    # The last live values make a restart transparent when the disk is mounted.
+    with db() as connection:
+        for symbol in SYMBOLS:
+            rows = connection.execute(
+                "SELECT symbol, kind, observed_at, received_at, price, size, side, level "
+                "FROM market_events WHERE symbol = ? ORDER BY id DESC LIMIT ?",
+                (symbol, MAX_EVENTS),
+            ).fetchall()
+            for row in reversed(rows):
+                apply_event(dict(row), persist=False)
+
+
+def persist_event(payload: dict[str, Any]) -> None:
+    with db() as connection:
+        connection.execute(
+            "INSERT INTO market_events (symbol, kind, observed_at, received_at, price, size, side, level) "
+            "VALUES (:symbol, :kind, :observed_at, :received_at, :price, :size, :side, :level)",
+            payload,
+        )
+
+
+def history_events(symbol: str, limit: int = 100_000) -> list[dict[str, Any]]:
+    with db() as connection:
+        rows = connection.execute(
+            "SELECT symbol, kind, observed_at, received_at, price, size, side, level "
+            "FROM market_events WHERE symbol = ? ORDER BY id DESC LIMIT ?",
+            (symbol, limit),
+        ).fetchall()
+    return [dict(row) for row in reversed(rows)]
+
+
+def apply_event(payload: dict[str, Any], persist: bool = True) -> None:
+    symbol = payload["symbol"]
+    state[symbol] = payload
+    events[symbol].append(payload)
+    if payload["kind"] == "depth" and payload.get("side") in {"bid", "ask"} and payload.get("level") and payload.get("price") is not None:
+        book[symbol][payload["side"]][int(payload["level"])] = {
+            "level": int(payload["level"]),
+            "price": payload["price"],
+            "size": payload.get("size") or 0.0,
+            "observed_at": payload["observed_at"],
+        }
+    if persist:
+        persist_event(payload)
+
 def verify_vm_identity(authorization: str | None) -> None:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=403, detail="missing vm identity")
@@ -49,7 +138,7 @@ def verify_vm_identity(authorization: str | None) -> None:
 
 def candles(symbol: str, seconds: int, limit: int) -> list[dict[str, Any]]:
     buckets: dict[int, dict[str, Any]] = {}
-    for event in events[symbol]:
+    for event in history_events(symbol):
         if event["kind"] != "trade" or event.get("price") is None:
             continue
         stamp = int(event_time(event["observed_at"]).timestamp())
@@ -76,10 +165,7 @@ def ingest(event: FeedEvent, authorization: str | None = Header(default=None)) -
     symbol = event.symbol.upper()
     if symbol not in state: raise HTTPException(status_code=422, detail="unsupported symbol")
     payload = event.model_dump() | {"received_at": now_iso()}
-    state[symbol] = payload
-    events[symbol].append(payload)
-    if event.kind == "depth" and event.side in {"bid", "ask"} and event.level and event.price is not None:
-        book[symbol][event.side][event.level] = {"level": event.level, "price": event.price, "size": event.size or 0.0, "observed_at": event.observed_at}
+    apply_event(payload)
     return {"status": "accepted"}
 
 @app.get("/terminal/chart")
@@ -88,7 +174,21 @@ def terminal_chart(symbol: str = "MNQ", timeframe: str = "1m", limit: int = Quer
     if symbol not in events: raise HTTPException(status_code=422, detail="unsupported symbol")
     seconds = {"1m": 60, "5m": 300, "15m": 900}.get(timeframe)
     if seconds is None: raise HTTPException(status_code=422, detail="unsupported timeframe")
-    return {"symbol": symbol, "timeframe": timeframe, "candles": candles(symbol, seconds, limit), "source": "rithmic-realtime", "persistence": "memory-window"}
+    return {"symbol": symbol, "timeframe": timeframe, "candles": candles(symbol, seconds, limit), "source": "rithmic-realtime", "persistence": "sqlite-mounted-disk" if DB_PATH.startswith("/var/data/") else "sqlite-ephemeral"}
+
+
+@app.get("/terminal/history")
+def terminal_history(symbol: str = "MNQ") -> dict[str, Any]:
+    symbol = symbol.upper()
+    if symbol not in events:
+        raise HTTPException(status_code=422, detail="unsupported symbol")
+    with db() as connection:
+        row = connection.execute(
+            "SELECT COUNT(*) AS event_count, MIN(observed_at) AS first_event, MAX(observed_at) AS last_event "
+            "FROM market_events WHERE symbol = ?",
+            (symbol,),
+        ).fetchone()
+    return {"symbol": symbol, **dict(row), "db_path": DB_PATH, "durable": DB_PATH.startswith("/var/data/")}
 
 @app.get("/terminal/book")
 def terminal_book(symbol: str = "MNQ") -> dict[str, Any]:
