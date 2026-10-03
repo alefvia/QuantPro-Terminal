@@ -200,7 +200,7 @@ def candles(symbol: str, seconds: int, limit: int) -> list[dict[str, Any]]:
         candle["volume"] += size
         if event.get("side") == "ask": candle["buy_volume"] += size
         elif event.get("side") == "bid": candle["sell_volume"] += size
-    return list(sorted(buckets.values()))[-max(1, min(limit, 800)) :]
+    return sorted(buckets.values(), key=lambda candle: candle["time"])[-max(1, min(limit, 800)) :]
 
 def order_book(symbol: str) -> dict[str, list[dict[str, Any]]]:
     levels = book[symbol]
