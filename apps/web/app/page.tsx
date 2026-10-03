@@ -1,14 +1,43 @@
-const instruments=[["NQ","Nasdaq E-mini"],["MNQ","Nasdaq Micro"],["GC","Gold"],["MGC","Micro Gold"]];
-const desks=[["Order Flow","Footprint · CVD · Imbalance"],["Liquidity","DOM · Add/Pull · Absorption"],["Market Structure","VWAP · Profile · Sessions"],["Regime","Volatility · Trend · Range"],["Macro","Rates · USD · Events"],["Intermarket","NQ · Gold · Yields"],["Discovery","Pattern search · Hypotheses"],["Validation","OOS · Walk-forward · Costs"],["Macro Reaction","Surprise · Rates · USD · Flow"],["Feed Adapters","Rithmic · IBKR · Gateway"],["Risk","Sizing · Limits · Kill switch"]];
-const metrics=["VWAP","POC","VAH","VAL","CVD","DOM Imbalance","Absorption","Liquidity"];
-export default function Home(){return <main>
-<header><div><p className="eyebrow">QUANTPRO · INSTITUTIONAL RESEARCH WORKSTATION</p><h1>Trading Desk</h1><p className="sub">Decision intelligence · Order Flow · Liquidity · Quant · Risk</p></div><div className="badges"><span className="badge">RESEARCH</span><span className="danger">LIVE LOCKED</span></div></header>
-<nav>{instruments.map(([s,n],i)=><button className={i===0?"active":""} key={s}><b>{s}</b><small>{n}</small><span>—</span></button>)}</nav>
-<section className="status"><div><span>MARKET DATA</span><b className="red">OFFLINE</b></div><div><span>SESSION</span><b>19:00–22:00 BRT</b></div><div><span>DATA QUALITY</span><b className="amber">BLOCKED</b></div><div><span>EXECUTION</span><b className="red">DISABLED</b></div></section>
-<section className="workspace">
-<div className="chart panel"><div className="sectionHead"><div><p className="label">NQ · MARKET STRUCTURE / ORDER FLOW</p><h2>Market feed awaiting connection</h2></div><span className="offline">OFFLINE</span></div><div className="placeholder"><div className="depth"><i/><i/><i/><i/><i/><i/><i/><i/><i/></div><strong>NO MARKET DATA</strong><p>Prices and institutional metrics are never fabricated.</p></div><div className="metricGrid">{metrics.map(x=><div key={x}><span>{x}</span><b>—</b></div>)}</div></div>
-<aside className="panel"><p className="label">DECISION ENGINE</p><strong className="wait">WAIT</strong><p className="reason">Insufficient verified evidence.</p><div className="divider"/><p className="label">TRADE PLAN</p>{["Entry","Invalidation","Stop","Target 1","Target 2"].map(x=><div className="row" key={x}><span>{x}</span><b>—</b></div>)}<div className="divider"/><p className="label">RISK ENGINE</p><b className="red">VETO ACTIVE</b><p>Data-quality gate blocks orders.</p><div className="divider"/><p className="label">CALIBRATED PROBABILITY</p><b>UNAVAILABLE</b><p>Enabled only after OOS evidence.</p></aside>
-</section>
-<section><div className="sectionHead"><div><p className="label">ANALYTICS STACK</p><h2>Institutional intelligence layers</h2></div><span className="muted">QuantPro V3 · PRE-DATA</span></div><div className="deskGrid">{desks.map(([a,b],i)=><article key={a}><div><b>{a}</b><small>{b}</small></div><span className={i<8?"ready":"standby"}>{i<8?"READY":"STANDBY"}</span></article>)}</div></section>
-<footer>Research environment · No broker orders · Real-money execution remains locked</footer>
-</main>}
+"use client";
+
+import { useEffect, useState } from "react";
+
+const RELAY = "https://quantpro-market-relay.onrender.com/terminal/state";
+const instruments = [["NQ", "Nasdaq E-mini"], ["MNQ", "Nasdaq Micro"], ["GC", "Gold"], ["MGC", "Micro Gold"]] as const;
+const desks = ["Order Flow", "Footprint", "CVD · Imbalance", "Liquidity", "DOM · Add/Pull", "Market Structure"];
+
+type Quote = { price?: number; observed_at?: string };
+type TerminalState = { state?: Record<string, Quote> };
+
+export default function Home() {
+  const [data, setData] = useState<TerminalState>({});
+  const [online, setOnline] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const response = await fetch(RELAY, { cache: "no-store" });
+        if (!response.ok) throw new Error("relay unavailable");
+        const next = await response.json();
+        if (active) { setData(next); setOnline(Boolean(next.state?.MNQ?.price)); }
+      } catch { if (active) setOnline(false); }
+    };
+    load();
+    const timer = window.setInterval(load, 5000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
+
+  const mnq = data.state?.MNQ;
+  const price = mnq?.price ? mnq.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
+  const updated = mnq?.observed_at ? new Date(mnq.observed_at).toLocaleTimeString("pt-BR") : "aguardando feed";
+
+  return <main>
+    <header><div><p className="eyebrow">QUANTPRO · INSTITUTIONAL RESEARCH WORKSTATION</p><h1>Trading Desk</h1><p className="sub">Pesquisa e leitura de mercado — sem execução de ordens</p></div><div className={online ? "status online" : "status"}>{online ? "● DADOS RITHMIC" : "● AGUARDANDO DADOS"}</div></header>
+    <nav>{instruments.map(([s,n],i)=><button className={i===1 ? "active" : ""} key={s}><b>{s}</b><small>{n}</small><span>{s === "MNQ" ? price : "—"}</span></button>)}</nav>
+    <section className="status"><span>MARKET DATA</span><span className={online ? "online" : ""}>{online ? "ONLINE" : "OFFLINE"}</span><span>Última atualização: {updated}</span></section>
+    <section className="workspace"><div className="chart panel"><div className="sectionHead"><div><p className="label">MNQ · LIVE FEED</p><h2>{price}</h2><p className="reason">Preço recebido do Rithmic. Nenhuma ordem pode ser enviada por este painel.</p></div></div><div className="grid">{desks.map(x=><span key={x}>{x}</span>)}</div></div><aside className="panel"><p className="label">DECISION ENGINE</p><strong className="wait">WAIT</strong><p className="reason">Dados em modo leitura. Aguardando confirmação estrutural.</p></aside></section>
+    <section><div className="sectionHead"><div><p className="label">ANALYTICS STACK</p><h2>Camadas institucionais</h2></div><span>Sem corretora · execução real bloqueada</span></div></section>
+    <footer>Ambiente de pesquisa · Sem ordens de corretora · Execução em dinheiro real permanece bloqueada</footer>
+  </main>;
+}
