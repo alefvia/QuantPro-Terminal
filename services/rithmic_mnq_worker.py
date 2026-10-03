@@ -1,19 +1,15 @@
 """Cloud Rithmic MNQ connector with authenticated read-only relay."""
 
-
 import asyncio
 import json
 import logging
 import os
 from urllib.parse import quote
 
-
 import httpx
-
 
 from packages.data_engine.rithmic_mnq_client import RithmicMNQClient
 from packages.data_engine.rithmic_runtime import RithmicRuntimeConfig
-
 
 RELAY_URL = os.getenv("QUANTPRO_RELAY_URL", "https://quantpro-market-relay.onrender.com/ingest")
 RELAY_AUDIENCE = os.getenv("QUANTPRO_RELAY_AUDIENCE", "https://quantpro-market-relay.onrender.com")
@@ -35,6 +31,7 @@ def _payload(event) -> dict:
         "price": float(event.price),
         "size": float(event.size),
         "side": event.side,
+        "level": event.level,
     }
 
 
@@ -75,14 +72,24 @@ async def main() -> None:
             except httpx.HTTPError:
                 logging.exception("QuantPro local feed ingest failed; event will not be shown")
                 continue
-            print(json.dumps({
-                "provider": event.provider, "symbol": _terminal_symbol(event.symbol),
-                "kind": event.kind, "observed_at": event.observed_at.isoformat(),
-                "price": str(event.price), "size": event.size, "side": event.side,
-                "level": event.level,
-            }, separators=(",", ":"), default=str), flush=True)
+            print(
+                json.dumps(
+                    {
+                        "provider": event.provider,
+                        "symbol": _terminal_symbol(event.symbol),
+                        "kind": event.kind,
+                        "observed_at": event.observed_at.isoformat(),
+                        "price": str(event.price),
+                        "size": event.size,
+                        "side": event.side,
+                        "level": event.level,
+                    },
+                    separators=(",", ":"),
+                    default=str,
+                ),
+                flush=True,
+            )
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-
