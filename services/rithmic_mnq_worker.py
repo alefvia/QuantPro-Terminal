@@ -11,8 +11,8 @@ import httpx
 from packages.data_engine.rithmic_mnq_client import RithmicMNQClient
 from packages.data_engine.rithmic_runtime import RithmicRuntimeConfig
 
-RELAY_URL = os.getenv("QUANTPRO_RELAY_URL", "https://quantpro-identity-relay.onrender.com/ingest")
-RELAY_AUDIENCE = os.getenv("QUANTPRO_RELAY_AUDIENCE", "https://quantpro-identity-relay.onrender.com")
+RELAY_URL = os.getenv("QUANTPRO_RELAY_URL", "https://quantpro-market-relay.onrender.com/ingest")
+RELAY_AUDIENCE = os.getenv("QUANTPRO_RELAY_AUDIENCE", "https://quantpro-market-relay.onrender.com")
 METADATA_IDENTITY = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity"
 
 def _terminal_symbol(symbol: str) -> str:
@@ -69,7 +69,7 @@ async def main() -> None:
             print(json.dumps({
                 "provider": event.provider, "symbol": _terminal_symbol(event.symbol),
                 "kind": event.kind, "observed_at": event.observed_at.isoformat(),
-                "price": str(event.price), "size": str(event.size), "side": event.side,
+                "price": str(event.price), "size": event.size, "side": event.side,
                 "level": event.level,
             }, separators=(",", ":")), flush=True)
 
