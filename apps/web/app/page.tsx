@@ -15,17 +15,18 @@ function fmt(value?: number) { return value == null ? "—" : value.toLocaleStri
 function CandleChart({ candles }: { candles: Candle[] }) {
   const model = useMemo(() => {
     if (!candles.length) return null;
-    const high = Math.max(...candles.map((c) => c.high));
-    const low = Math.min(...candles.map((c) => c.low));
+    const display = candles.slice(-72);
+    const high = Math.max(...display.map((c) => c.high));
+    const low = Math.min(...display.map((c) => c.low));
     const range = Math.max(high - low, 0.25);
-    const width = 960, height = 350, pad = 20, step = (width - pad * 2) / candles.length;
+    const width = 960, height = 350, pad = 20, step = (width - pad * 2) / display.length;
     const y = (price: number) => pad + ((high - price) / range) * (height - pad * 2);
     return { width, height, pad, step, y };
   }, [candles]);
   if (!model) return <div className="placeholder"><strong>AGUARDANDO TRADES RITHMIC</strong><p>As velas aparecem quando os negócios reais chegam ao relay.</p></div>;
   return <svg className="candleChart" viewBox={`0 0 ${model.width} ${model.height}`} role="img" aria-label="Candles reais do MNQ">
     {[0.2, 0.4, 0.6, 0.8].map((line) => <line key={line} x1="0" x2={model.width} y1={model.height * line} y2={model.height * line} stroke="#1b2835" strokeWidth="1" />)}
-    {candles.map((candle, index) => { const x = model.pad + index * model.step + model.step / 2; const up = candle.close >= candle.open; const color = up ? "#38c99b" : "#ff6e82"; const top = model.y(Math.max(candle.open, candle.close)); const body = Math.max(2, Math.abs(model.y(candle.open) - model.y(candle.close))); return <g key={candle.time}><line x1={x} x2={x} y1={model.y(candle.high)} y2={model.y(candle.low)} stroke={color} strokeWidth="1.5"/><rect x={x - Math.max(1.5, model.step * .28)} y={top} width={Math.max(3, model.step * .56)} height={body} fill={color}/></g>; })}
+    {display.map((candle, index) => { const x = model.pad + index * model.step + model.step / 2; const up = candle.close >= candle.open; const color = up ? "#38c99b" : "#ff6e82"; const top = model.y(Math.max(candle.open, candle.close)); const body = Math.max(2, Math.abs(model.y(candle.open) - model.y(candle.close))); return <g key={candle.time}><line x1={x} x2={x} y1={model.y(candle.high)} y2={model.y(candle.low)} stroke={color} strokeWidth="1.5"/><rect x={x - Math.max(1.5, model.step * .28)} y={top} width={Math.max(3, model.step * .56)} height={body} fill={color}/></g>; })}
   </svg>;
 }
 
