@@ -191,29 +191,11 @@ class RithmicMNQClient:
                                 aggressor=aggressor,
                             )
                         elif base.template_id == 151:
-                            msg = self.bbo_pb.BestBidOffer()
-                            msg.ParseFromString(raw)
-                            observed_at = datetime.fromtimestamp(
-                                msg.ssboe + msg.usecs / 1_000_000, tz=UTC
-                            )
-                            if msg.HasField("bid_price") and msg.HasField("bid_size_64"):
-                                yield normalize_depth(
-                                    symbol=msg.symbol,
-                                    observed_at=observed_at,
-                                    price=Decimal(str(msg.bid_price)),
-                                    size=Decimal(msg.bid_size_64),
-                                    side="bid",
-                                    level=1,
-                                )
-                            if msg.HasField("ask_price") and msg.HasField("ask_size_64"):
-                                yield normalize_depth(
-                                    symbol=msg.symbol,
-                                    observed_at=observed_at,
-                                    price=Decimal(str(msg.ask_price)),
-                                    size=Decimal(msg.ask_size_64),
-                                    side="ask",
-                                    level=1,
-                                )
+                            # BBO is only a single quote.  It must never be
+                            # advertised as level 1 of a DOM, because it can
+                            # overwrite an order-book snapshot and manufacture
+                            # a false spread.  The DOM below uses template 156.
+                            continue
                         elif base.template_id == 156:
                             msg = self.order_book_pb.OrderBook()
                             msg.ParseFromString(raw)
