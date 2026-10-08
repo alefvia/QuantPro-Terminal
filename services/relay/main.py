@@ -206,6 +206,7 @@ def candles(symbol: str, seconds: int, limit: int) -> list[dict[str, Any]]:
         event for event in history_events(symbol)
         if event["kind"] == "trade" and event.get("price") is not None
     ]
+    live_events.sort(key=lambda event: event_time(event["observed_at"]))
     # A historical DBN download and a live ticker stream can overlap. Live
     # trades are authoritative for their buckets; never merge two contracts or
     # two feeds into one candle.
@@ -285,7 +286,16 @@ def import_ohlcv(payload: HistoricalImport, x_quantpro_history_token: str | None
 def terminal_chart(symbol: str = "MNQ", timeframe: str = "1m", limit: int = Query(400, ge=1, le=800)) -> dict[str, Any]:
     symbol = symbol.upper()
     if symbol not in events: raise HTTPException(status_code=422, detail="unsupported symbol")
-    seconds = {"1m": 60, "5m": 300, "15m": 900}.get(timeframe)
+    seconds = {
+        "1m": 60,
+        "2m": 120,
+        "5m": 300,
+        "10m": 600,
+        "15m": 900,
+        "30m": 1800,
+        "60m": 3600,
+        "1d": 86400,
+    }.get(timeframe)
     if seconds is None: raise HTTPException(status_code=422, detail="unsupported timeframe")
     return {"symbol": symbol, "timeframe": timeframe, "candles": candles(symbol, seconds, limit), "source": "rithmic-realtime", "persistence": "sqlite-mounted-disk" if DB_PATH.startswith("/var/data/") else "sqlite-ephemeral"}
 
