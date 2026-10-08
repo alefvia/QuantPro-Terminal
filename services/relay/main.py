@@ -22,8 +22,11 @@ RELAY_AUDIENCE = os.environ["QUANTPRO_RELAY_AUDIENCE"]
 VM_SERVICE_ACCOUNT = os.environ["QUANTPRO_VM_SERVICE_ACCOUNT"]
 HISTORY_IMPORT_TOKEN = os.getenv("QUANTPRO_HISTORY_IMPORT_TOKEN")
 MAX_EVENTS = 25_000
+BOOK_LEVELS_REQUIRED = 5
+BOOK_MAX_AGE_SECONDS = 3
 DB_PATH = os.getenv("QUANTPRO_DB_PATH", "/tmp/quantpro_relay.sqlite3")
 state: dict[str, dict[str, Any]] = {symbol: {} for symbol in SYMBOLS}
+last_trade: dict[str, dict[str, Any]] = {symbol: {} for symbol in SYMBOLS}
 events: dict[str, deque[dict[str, Any]]] = {symbol: deque(maxlen=MAX_EVENTS) for symbol in SYMBOLS}
 book: dict[str, dict[str, dict[int, dict[str, Any]]]] = {symbol: {"bid": {}, "ask": {}} for symbol in SYMBOLS}
 
@@ -35,6 +38,7 @@ class FeedEvent(BaseModel):
     size: float | None = None
     side: str | None = None
     level: int | None = None
+    source_symbol: str | None = None
 
 
 class HistoricalCandle(BaseModel):
@@ -87,6 +91,7 @@ def initialize_store() -> None:
                 size REAL,
                 side TEXT,
                 level INTEGER
+                ,source_symbol TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_market_events_symbol_time
                 ON market_events(symbol, observed_at DESC);
@@ -106,6 +111,12 @@ def initialize_store() -> None:
             );
             """
         )
+        # Existing Render disks may contain the initial schema. SQLite does not
+        # support ADD COLUMN IF NOT EXISTS, so deliberately tolerate that case.
+        try:
+            connection.execute("ALTER TABLE market_events ADD COLUMN source_symbol TEXT")
+        except sqlite3.OperationalError:
+            pass
 
 
 @app.on_event("startup")
@@ -115,7 +126,7 @@ def restore_relay_state() -> None:
     with db() as connection:
         for symbol in SYMBOLS:
             rows = connection.execute(
-                "SELECT symbol, kind, observed_at, received_at, price, size, side, level "
+                "SELECT symbol, kind, observed_at, received_at, price, size, side, level, source_symbol "
                 "FROM market_events WHERE symbol = ? ORDER BY id DESC LIMIT ?",
                 (symbol, MAX_EVENTS),
             ).fetchall()
@@ -126,8 +137,8 @@ def restore_relay_state() -> None:
 def persist_event(payload: dict[str, Any]) -> None:
     with db() as connection:
         connection.execute(
-            "INSERT INTO market_events (symbol, kind, observed_at, received_at, price, size, side, level) "
-            "VALUES (:symbol, :kind, :observed_at, :received_at, :price, :size, :side, :level)",
+            "INSERT INTO market_events (symbol, kind, observed_at, received_at, price, size, side, level, source_symbol) "
+            "VALUES (:symbol, :kind, :observed_at, :received_at, :price, :size, :side, :level, :source_symbol)",
             payload,
         )
 
@@ -135,7 +146,7 @@ def persist_event(payload: dict[str, Any]) -> None:
 def history_events(symbol: str, limit: int = 100_000) -> list[dict[str, Any]]:
     with db() as connection:
         rows = connection.execute(
-            "SELECT symbol, kind, observed_at, received_at, price, size, side, level "
+            "SELECT symbol, kind, observed_at, received_at, price, size, side, level, source_symbol "
             "FROM market_events WHERE symbol = ? ORDER BY id DESC LIMIT ?",
             (symbol, limit),
         ).fetchall()
@@ -156,6 +167,8 @@ def apply_event(payload: dict[str, Any], persist: bool = True) -> None:
     symbol = payload["symbol"]
     state[symbol] = payload
     events[symbol].append(payload)
+    if payload["kind"] == "trade" and payload.get("price") is not None:
+        last_trade[symbol] = payload
     if payload["kind"] == "depth" and payload.get("side") in {"bid", "ask"} and payload.get("level") and payload.get("price") is not None:
         book[symbol][payload["side"]][int(payload["level"])] = {
             "level": int(payload["level"]),
@@ -189,8 +202,21 @@ def candles(symbol: str, seconds: int, limit: int) -> list[dict[str, Any]]:
         candle = buckets.setdefault(key, {"time": key, "open": event["open"], "high": event["high"], "low": event["low"], "close": event["close"], "volume": 0.0, "buy_volume": 0.0, "sell_volume": 0.0})
         candle["high"], candle["low"], candle["close"] = max(candle["high"], event["high"]), min(candle["low"], event["low"]), event["close"]
         candle["volume"] += event["volume"]
-    for event in history_events(symbol):
-        if event["kind"] != "trade" or event.get("price") is None:
+    live_events = [
+        event for event in history_events(symbol)
+        if event["kind"] == "trade" and event.get("price") is not None
+    ]
+    # A historical DBN download and a live ticker stream can overlap. Live
+    # trades are authoritative for their buckets; never merge two contracts or
+    # two feeds into one candle.
+    if live_events:
+        first_live_bucket = min(int(event_time(event["observed_at"]).timestamp()) for event in live_events)
+        first_live_bucket -= first_live_bucket % seconds
+        buckets = {key: candle for key, candle in buckets.items() if key < first_live_bucket}
+    active_contract = (last_trade[symbol].get("source_symbol") or "").upper()
+    for event in live_events:
+        source_symbol = (event.get("source_symbol") or "").upper()
+        if active_contract and source_symbol and source_symbol != active_contract:
             continue
         stamp = int(event_time(event["observed_at"]).timestamp())
         key = stamp - (stamp % seconds)
@@ -202,9 +228,24 @@ def candles(symbol: str, seconds: int, limit: int) -> list[dict[str, Any]]:
         elif event.get("side") == "bid": candle["sell_volume"] += size
     return sorted(buckets.values(), key=lambda candle: candle["time"])[-max(1, min(limit, 800)) :]
 
-def order_book(symbol: str) -> dict[str, list[dict[str, Any]]]:
+def order_book(symbol: str) -> dict[str, Any]:
     levels = book[symbol]
-    return {"bids": sorted(levels["bid"].values(), key=lambda row: row["price"], reverse=True)[:10], "asks": sorted(levels["ask"].values(), key=lambda row: row["price"])[:10]}
+    bids = sorted(levels["bid"].values(), key=lambda row: row["price"], reverse=True)[:10]
+    asks = sorted(levels["ask"].values(), key=lambda row: row["price"])[:10]
+    now = datetime.now(timezone.utc)
+    all_levels = bids + asks
+    fresh = bool(all_levels) and all((now - event_time(row["observed_at"])).total_seconds() <= BOOK_MAX_AGE_SECONDS for row in all_levels)
+    coherent = (
+        len(bids) >= BOOK_LEVELS_REQUIRED
+        and len(asks) >= BOOK_LEVELS_REQUIRED
+        and bids[0]["price"] < asks[0]["price"]
+        and asks[0]["price"] - bids[0]["price"] <= 2.5
+        and all(bids[index]["price"] > bids[index + 1]["price"] for index in range(len(bids) - 1))
+        and all(asks[index]["price"] < asks[index + 1]["price"] for index in range(len(asks) - 1))
+    )
+    if not fresh or not coherent:
+        return {"bids": [], "asks": [], "available": False, "reason": "Aguardando profundidade Rithmic coerente"}
+    return {"bids": bids, "asks": asks, "available": True, "reason": None}
 
 @app.get("/health")
 def health() -> dict[str, str]:
@@ -272,7 +313,7 @@ def terminal_book(symbol: str = "MNQ") -> dict[str, Any]:
 def terminal_state() -> dict[str, Any]:
     markets, realtime = [], False
     for symbol in SYMBOLS:
-        event, status = state[symbol], "realtime" if state[symbol] else "offline"
+        event, status = last_trade[symbol], "realtime" if last_trade[symbol] else "offline"
         realtime = realtime or status == "realtime"
         markets.append({"symbol": symbol, "price": event.get("price"), "feed_status": status, "last_event": event or None})
     mnq_trades = [event for event in events["MNQ"] if event["kind"] == "trade"]
