@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const RELAY = "https://quantpro-market-relay.onrender.com";
-const frames = ["1m", "5m", "15m"] as const;
+const frames = ["1m", "2m", "5m", "10m", "15m", "30m", "60m", "1d"] as const;
 type Frame = (typeof frames)[number];
 const ranges = ["1h", "4h", "12h", "1d", "5d", "Tudo"] as const;
 type Range = (typeof ranges)[number];
@@ -74,7 +74,7 @@ export default function Home() {
       const fresh = Boolean(eventAt && Date.now() - new Date(eventAt).getTime() < 20000);
       if (active) { setState(next); setCandles(chart.candles ?? []); setBook(depth.book ?? { bids: [], asks: [] }); setOnline(fresh); }
     } catch { if (active) setOnline(false); } };
-    load(); const timer = window.setInterval(load, 5000); return () => { active = false; window.clearInterval(timer); };
+    load(); const timer = window.setInterval(load, 2000); return () => { active = false; window.clearInterval(timer); };
   }, [frame]);
   const mnq = state.markets?.find((market) => market.symbol === "MNQ");
   const updated = mnq?.last_event?.observed_at ? new Date(mnq.last_event.observed_at).toLocaleTimeString("pt-BR") : "aguardando feed";
