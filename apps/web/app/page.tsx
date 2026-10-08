@@ -7,7 +7,7 @@ const frames = ["1m", "5m", "15m"] as const;
 type Frame = (typeof frames)[number];
 type Candle = { time: number; open: number; high: number; low: number; close: number; volume: number; buy_volume: number; sell_volume: number };
 type Level = { level: number; price: number; size: number };
-type Book = { bids: Level[]; asks: Level[] };
+type Book = { bids: Level[]; asks: Level[]; available?: boolean; reason?: string | null };
 type State = { markets?: { symbol: string; price?: number; last_event?: { observed_at?: string } }[]; mnq?: { cvd?: number; trade_count?: number; event_count?: number; book?: Book } };
 
 function fmt(value?: number) { return value == null ? "—" : value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -73,13 +73,13 @@ export default function Home() {
   const mnq = state.markets?.find((market) => market.symbol === "MNQ");
   const updated = mnq?.last_event?.observed_at ? new Date(mnq.last_event.observed_at).toLocaleTimeString("pt-BR") : "aguardando feed";
   const displayPrice = online ? mnq?.price : candles.at(-1)?.close;
-  const rows = Math.max(book.asks.length, book.bids.length, 5);
+  const rows = book.available ? Math.max(book.asks.length, book.bids.length, 5) : 0;
   return <main>
     <header><div><p className="eyebrow">QUANTPRO · MARKET INTELLIGENCE WORKSTATION</p><h1>MNQ Market Structure</h1><p className="sub">Rithmic Test · análise somente · execução bloqueada</p></div><div className={online ? "badge" : "danger"}>{online ? "● RITHMIC AO VIVO" : "● RITHMIC PAUSADO"}</div></header>
     <nav>{[["NQ", "Nasdaq E-mini"], ["MNQ", "Nasdaq Micro"], ["GC", "Gold"], ["MGC", "Micro Gold"]].map(([symbol, name]) => <button className={symbol === "MNQ" ? "active" : ""} key={symbol}><b>{symbol}</b><small>{name}</small><span>{symbol === "MNQ" ? fmt(displayPrice) : "—"}</span></button>)}</nav>
     <section className="status"><div><span>MARKET DATA</span><b className={online ? "ready" : "red"}>{online ? "RITHMIC AO VIVO" : candles.length ? "RITHMIC PAUSADO · CME CARREGADO" : "OFFLINE"}</b></div><div><span>TIMEFRAME</span><b>{frame}</b></div><div><span>ÚLTIMO EVENTO</span><b>{updated}</b></div><div><span>EXECUÇÃO</span><b className="red">DISABLED</b></div></section>
     <section className="workspace"><div className="chart panel"><div className="sectionHead"><div><p className="label">MNQ · HISTÓRICO CME + RITHMIC AO VIVO</p><h2>{fmt(displayPrice)}</h2></div><div className="timeframes">{frames.map((item) => <button className={frame === item ? "active" : ""} onClick={() => setFrame(item)} key={item}>{item}</button>)}</div></div><CandleChart candles={candles}/><div className="metricGrid"><div><span>CVD</span><b>{state.mnq?.cvd ?? "—"}</b></div><div><span>TRADES</span><b>{state.mnq?.trade_count ?? "—"}</b></div><div><span>EVENTOS</span><b>{state.mnq?.event_count ?? "—"}</b></div><div><span>FONTE</span><b>{online ? "CME + RITHMIC" : "CME · RITHMIC PAUSADO"}</b></div></div></div>
-    <aside className="panel"><p className="label">DOM · ORDER BOOK</p><div className="bookHead"><span>BID SIZE</span><span>PRICE</span><span>ASK SIZE</span></div>{Array.from({ length: rows }, (_, i) => <div className="bookRow" key={i}><b className="bid">{book.bids[i]?.size ?? ""}</b><span>{fmt(book.asks[i]?.price ?? book.bids[i]?.price)}</span><b className="ask">{book.asks[i]?.size ?? ""}</b></div>)}<div className="divider"/><p className="label">DECISION ENGINE</p><strong className="wait">WAIT</strong><p className="reason">Leitura em modo pesquisa. Nenhuma ordem pode ser enviada.</p></aside></section>
+    <aside className="panel"><p className="label">DOM · ORDER BOOK</p>{book.available ? <><div className="bookHead"><span>BID SIZE</span><span>PRICE</span><span>ASK SIZE</span></div>{Array.from({ length: rows }, (_, i) => <div className="bookRow" key={i}><b className="bid">{book.bids[i]?.size ?? ""}</b><span>{fmt(book.asks[i]?.price ?? book.bids[i]?.price)}</span><b className="ask">{book.asks[i]?.size ?? ""}</b></div>)}</> : <p className="reason">{book.reason ?? "Profundidade indisponível"}. O painel não exibirá um livro incompleto.</p>}<div className="divider"/><p className="label">DECISION ENGINE</p><strong className="wait">WAIT</strong><p className="reason">Leitura em modo pesquisa. Nenhuma ordem pode ser enviada.</p></aside></section>
     <footer>Dados reais de mercado · memória de sessão atual · persistência histórica e footprint entram na próxima camada</footer>
   </main>;
 }
