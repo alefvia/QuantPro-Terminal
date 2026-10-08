@@ -26,6 +26,7 @@ def _terminal_symbol(symbol: str) -> str:
 def _payload(event) -> dict:
     return {
         "symbol": _terminal_symbol(event.symbol),
+        "source_symbol": event.symbol,
         "kind": event.kind,
         "observed_at": event.observed_at.isoformat(),
         "price": float(event.price),
@@ -77,6 +78,7 @@ async def main() -> None:
                     {
                         "provider": event.provider,
                         "symbol": _terminal_symbol(event.symbol),
+                        "source_symbol": event.symbol,
                         "kind": event.kind,
                         "observed_at": event.observed_at.isoformat(),
                         "price": str(event.price),
