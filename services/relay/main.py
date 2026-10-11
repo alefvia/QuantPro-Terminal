@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import secrets
 import sqlite3
+import psycopg
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from google.auth.transport.requests import Request
 from google.oauth2 import id_token
 from pydantic import BaseModel
+from psycopg.rows import dict_row
 
 app = FastAPI(title="QuantPro Relay", version="1.2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["https://quant-pro-terminal.vercel.app"], allow_methods=["GET", "POST"], allow_headers=["Content-Type", "Authorization"])
@@ -24,6 +26,7 @@ HISTORY_IMPORT_TOKEN = os.getenv("QUANTPRO_HISTORY_IMPORT_TOKEN")
 MAX_EVENTS = 25_000
 BOOK_LEVELS_REQUIRED = 5
 BOOK_MAX_AGE_SECONDS = 3
+DATABASE_URL = os.getenv("DATABASE_URL")
 DB_PATH = os.getenv("QUANTPRO_DB_PATH", "/tmp/quantpro_relay.sqlite3")
 state: dict[str, dict[str, Any]] = {symbol: {} for symbol in SYMBOLS}
 last_trade: dict[str, dict[str, Any]] = {symbol: {} for symbol in SYMBOLS}
@@ -63,13 +66,10 @@ def event_time(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
 
 
-def db() -> sqlite3.Connection:
-    """Open the relay event store.
-
-    Set QUANTPRO_DB_PATH to a mounted persistent disk on Render. The default
-    deliberately remains local/ephemeral for development, rather than
-    claiming that an unmounted Render filesystem is durable.
-    """
+def db() -> Any:
+    """Open PostgreSQL in Render, with SQLite retained for local development."""
+    if DATABASE_URL:
+        return psycopg.connect(DATABASE_URL, row_factory=dict_row, connect_timeout=10)
     path = Path(DB_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(path)
@@ -77,46 +77,60 @@ def db() -> sqlite3.Connection:
     return connection
 
 
+def execute_query(connection: Any, statement: str, parameters: Any = ()) -> Any:
+    if DATABASE_URL:
+        statement = statement.replace("?", "%s")
+    return connection.execute(statement, parameters)
+
+
+def execute_many(connection: Any, statement: str, parameters: Any) -> Any:
+    if DATABASE_URL:
+        statement = statement.replace("?", "%s")
+    return connection.executemany(statement, parameters)
+
+
 def initialize_store() -> None:
+    event_id_type = "BIGSERIAL PRIMARY KEY" if DATABASE_URL else "INTEGER PRIMARY KEY AUTOINCREMENT"
+    statements = [
+        f"""CREATE TABLE IF NOT EXISTS market_events (
+            id {event_id_type},
+            symbol TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            observed_at TEXT NOT NULL,
+            received_at TEXT NOT NULL,
+            price DOUBLE PRECISION,
+            size DOUBLE PRECISION,
+            side TEXT,
+            level INTEGER,
+            source_symbol TEXT
+        )""",
+        """CREATE INDEX IF NOT EXISTS idx_market_events_symbol_time
+            ON market_events(symbol, observed_at DESC)""",
+        """CREATE INDEX IF NOT EXISTS idx_market_events_symbol_kind_time
+            ON market_events(symbol, kind, observed_at DESC)""",
+        """CREATE TABLE IF NOT EXISTS historical_candles (
+            symbol TEXT NOT NULL,
+            time BIGINT NOT NULL,
+            open DOUBLE PRECISION NOT NULL,
+            high DOUBLE PRECISION NOT NULL,
+            low DOUBLE PRECISION NOT NULL,
+            close DOUBLE PRECISION NOT NULL,
+            volume DOUBLE PRECISION NOT NULL,
+            source_symbol TEXT NOT NULL,
+            source TEXT NOT NULL,
+            PRIMARY KEY (symbol, time)
+        )""",
+    ]
     with db() as connection:
-        connection.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS market_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                symbol TEXT NOT NULL,
-                kind TEXT NOT NULL,
-                observed_at TEXT NOT NULL,
-                received_at TEXT NOT NULL,
-                price REAL,
-                size REAL,
-                side TEXT,
-                level INTEGER
-                ,source_symbol TEXT
-            );
-            CREATE INDEX IF NOT EXISTS idx_market_events_symbol_time
-                ON market_events(symbol, observed_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_market_events_symbol_kind_time
-                ON market_events(symbol, kind, observed_at DESC);
-            CREATE TABLE IF NOT EXISTS historical_candles (
-                symbol TEXT NOT NULL,
-                time INTEGER NOT NULL,
-                open REAL NOT NULL,
-                high REAL NOT NULL,
-                low REAL NOT NULL,
-                close REAL NOT NULL,
-                volume REAL NOT NULL,
-                source_symbol TEXT NOT NULL,
-                source TEXT NOT NULL,
-                PRIMARY KEY (symbol, time)
-            );
-            """
-        )
-        # Existing Render disks may contain the initial schema. SQLite does not
-        # support ADD COLUMN IF NOT EXISTS, so deliberately tolerate that case.
-        try:
-            connection.execute("ALTER TABLE market_events ADD COLUMN source_symbol TEXT")
-        except sqlite3.OperationalError:
-            pass
+        for statement in statements:
+            execute_query(connection, statement)
+        if DATABASE_URL:
+            execute_query(connection, "ALTER TABLE market_events ADD COLUMN IF NOT EXISTS source_symbol TEXT")
+        else:
+            try:
+                execute_query(connection, "ALTER TABLE market_events ADD COLUMN source_symbol TEXT")
+            except sqlite3.OperationalError:
+                pass
 
 
 @app.on_event("startup")
@@ -125,7 +139,7 @@ def restore_relay_state() -> None:
     # The last live values make a restart transparent when the disk is mounted.
     with db() as connection:
         for symbol in SYMBOLS:
-            rows = connection.execute(
+            rows = execute_query(connection,
                 "SELECT symbol, kind, observed_at, received_at, price, size, side, level, source_symbol "
                 "FROM market_events WHERE symbol = ? ORDER BY id DESC LIMIT ?",
                 (symbol, MAX_EVENTS),
@@ -136,16 +150,19 @@ def restore_relay_state() -> None:
 
 def persist_event(payload: dict[str, Any]) -> None:
     with db() as connection:
-        connection.execute(
+        execute_query(
+            connection,
             "INSERT INTO market_events (symbol, kind, observed_at, received_at, price, size, side, level, source_symbol) "
-            "VALUES (:symbol, :kind, :observed_at, :received_at, :price, :size, :side, :level, :source_symbol)",
-            payload,
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (payload["symbol"], payload["kind"], payload["observed_at"], payload["received_at"],
+             payload.get("price"), payload.get("size"), payload.get("side"), payload.get("level"),
+             payload.get("source_symbol")),
         )
 
 
 def history_events(symbol: str, limit: int = 100_000) -> list[dict[str, Any]]:
     with db() as connection:
-        rows = connection.execute(
+        rows = execute_query(connection,
             "SELECT symbol, kind, observed_at, received_at, price, size, side, level, source_symbol "
             "FROM market_events WHERE symbol = ? ORDER BY id DESC LIMIT ?",
             (symbol, limit),
@@ -155,7 +172,7 @@ def history_events(symbol: str, limit: int = 100_000) -> list[dict[str, Any]]:
 
 def history_candles(symbol: str) -> list[dict[str, Any]]:
     with db() as connection:
-        rows = connection.execute(
+        rows = execute_query(connection,
             "SELECT time, open, high, low, close, volume, source_symbol "
             "FROM historical_candles WHERE symbol = ? ORDER BY time",
             (symbol,),
@@ -275,11 +292,26 @@ def import_ohlcv(payload: HistoricalImport, x_quantpro_history_token: str | None
         for candle in payload.candles
     ]
     with db() as connection:
-        connection.executemany(
-            "INSERT OR REPLACE INTO historical_candles "
-            "(symbol, time, open, high, low, close, volume, source_symbol, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            rows,
-        )
+        if DATABASE_URL:
+            execute_many(
+                connection,
+                "INSERT INTO historical_candles "
+                "(symbol, time, open, high, low, close, volume, source_symbol, source) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT (symbol, time) DO UPDATE SET "
+                "open = EXCLUDED.open, high = EXCLUDED.high, low = EXCLUDED.low, "
+                "close = EXCLUDED.close, volume = EXCLUDED.volume, "
+                "source_symbol = EXCLUDED.source_symbol, source = EXCLUDED.source",
+                rows,
+            )
+        else:
+            execute_many(
+                connection,
+                "INSERT OR REPLACE INTO historical_candles "
+                "(symbol, time, open, high, low, close, volume, source_symbol, source) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                rows,
+            )
     return {"status": "accepted", "symbol": symbol, "imported": len(rows)}
 
 @app.get("/terminal/chart")
@@ -297,7 +329,7 @@ def terminal_chart(symbol: str = "MNQ", timeframe: str = "1m", limit: int = Quer
         "1d": 86400,
     }.get(timeframe)
     if seconds is None: raise HTTPException(status_code=422, detail="unsupported timeframe")
-    return {"symbol": symbol, "timeframe": timeframe, "candles": candles(symbol, seconds, limit), "source": "rithmic-realtime", "persistence": "sqlite-mounted-disk" if DB_PATH.startswith("/var/data/") else "sqlite-ephemeral"}
+    return {"symbol": symbol, "timeframe": timeframe, "candles": candles(symbol, seconds, limit), "source": "rithmic-realtime", "persistence": "postgresql" if DATABASE_URL else ("sqlite-mounted-disk" if DB_PATH.startswith("/var/data/") else "sqlite-ephemeral")}
 
 
 @app.get("/terminal/history")
@@ -306,12 +338,14 @@ def terminal_history(symbol: str = "MNQ") -> dict[str, Any]:
     if symbol not in events:
         raise HTTPException(status_code=422, detail="unsupported symbol")
     with db() as connection:
-        row = connection.execute(
+        row = execute_query(connection,
             "SELECT COUNT(*) AS event_count, MIN(observed_at) AS first_event, MAX(observed_at) AS last_event "
             "FROM market_events WHERE symbol = ?",
             (symbol,),
         ).fetchone()
-    return {"symbol": symbol, **dict(row), "db_path": DB_PATH, "durable": DB_PATH.startswith("/var/data/")}
+    return {"symbol": symbol, **dict(row), "database": "postgresql" if DATABASE_URL else "sqlite",
+        "db_path": None if DATABASE_URL else DB_PATH,
+        "durable": bool(DATABASE_URL) or DB_PATH.startswith("/var/data/")}
 
 @app.get("/terminal/book")
 def terminal_book(symbol: str = "MNQ") -> dict[str, Any]:
