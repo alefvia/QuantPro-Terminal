@@ -212,7 +212,7 @@ def verify_history_import(token: str | None) -> None:
     if not HISTORY_IMPORT_TOKEN or not token or not secrets.compare_digest(token, HISTORY_IMPORT_TOKEN):
         raise HTTPException(status_code=403, detail="invalid history import token")
 
-def candles(symbol: str, seconds: int, limit: int) -> list[dict[str, Any]]:
+def candles(symbol: str, seconds: int, limit: int, before: int | None = None) -> list[dict[str, Any]]:
     buckets: dict[int, dict[str, Any]] = {}
     for event in history_candles(symbol):
         stamp = int(event["time"])
@@ -245,7 +245,10 @@ def candles(symbol: str, seconds: int, limit: int) -> list[dict[str, Any]]:
         candle["volume"] += size
         if event.get("side") == "ask": candle["buy_volume"] += size
         elif event.get("side") == "bid": candle["sell_volume"] += size
-    return sorted(buckets.values(), key=lambda candle: candle["time"])[-max(1, min(limit, 800)) :]
+    ordered = sorted(buckets.values(), key=lambda candle: candle["time"])
+    if before is not None:
+        ordered = [candle for candle in ordered if candle["time"] < before]
+    return ordered[-max(1, min(limit, 5_000)) :]
 
 def order_book(symbol: str) -> dict[str, Any]:
     levels = book[symbol]
@@ -316,7 +319,7 @@ def import_ohlcv(payload: HistoricalImport, x_quantpro_history_token: str | None
     return {"status": "accepted", "symbol": symbol, "imported": len(rows)}
 
 @app.get("/terminal/chart")
-def terminal_chart(symbol: str = "MNQ", timeframe: str = "1m", limit: int = Query(400, ge=1, le=800)) -> dict[str, Any]:
+def terminal_chart(symbol: str = "MNQ", timeframe: str = "1m", limit: int = Query(400, ge=1, le=5_000), before: int | None = Query(default=None, ge=0)) -> dict[str, Any]:
     symbol = symbol.upper()
     if symbol not in events: raise HTTPException(status_code=422, detail="unsupported symbol")
     seconds = {
@@ -330,7 +333,7 @@ def terminal_chart(symbol: str = "MNQ", timeframe: str = "1m", limit: int = Quer
         "1d": 86400,
     }.get(timeframe)
     if seconds is None: raise HTTPException(status_code=422, detail="unsupported timeframe")
-    return {"symbol": symbol, "timeframe": timeframe, "candles": candles(symbol, seconds, limit), "source": "rithmic-realtime", "persistence": "postgresql" if DATABASE_URL else ("sqlite-mounted-disk" if DB_PATH.startswith("/var/data/") else "sqlite-ephemeral")}
+    return {"symbol": symbol, "timeframe": timeframe, "candles": candles(symbol, seconds, limit, before), "source": "rithmic-realtime", "persistence": "postgresql" if DATABASE_URL else ("sqlite-mounted-disk" if DB_PATH.startswith("/var/data/") else "sqlite-ephemeral")}
 
 
 @app.get("/terminal/history")
