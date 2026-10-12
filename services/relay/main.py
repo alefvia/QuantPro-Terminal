@@ -172,15 +172,37 @@ def history_events(symbol: str, limit: int = 100_000) -> list[dict[str, Any]]:
     return [dict(row) for row in reversed(rows)]
 
 
-def history_candles(symbol: str) -> list[dict[str, Any]]:
+def history_candles(symbol: str, seconds: int, limit: int, before: int | None = None) -> list[dict[str, Any]]:
+    """Read only the requested historical page and aggregate it in the database."""
+    statement = (
+        "WITH bucket_rows AS ("
+        " SELECT time - (time % ?) AS bucket, time, open, high, low, close, volume "
+        " FROM historical_candles WHERE symbol = ?"
+    )
+    parameters: list[Any] = [seconds, symbol]
+    if before is not None:
+        statement += " AND (time - (time % ?)) < ?"
+        parameters.extend((seconds, before))
+    statement += (
+        "), ranked AS ("
+        " SELECT bucket, "
+        " FIRST_VALUE(open) OVER (PARTITION BY bucket ORDER BY time ASC) AS open, "
+        " MAX(high) OVER (PARTITION BY bucket) AS high, "
+        " MIN(low) OVER (PARTITION BY bucket) AS low, "
+        " FIRST_VALUE(close) OVER (PARTITION BY bucket ORDER BY time DESC) AS close, "
+        " SUM(volume) OVER (PARTITION BY bucket) AS volume, "
+        " ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY time DESC) AS row_num "
+        " FROM bucket_rows"
+        ") SELECT bucket AS time, open, high, low, close, volume "
+        "FROM ranked WHERE row_num = 1 ORDER BY bucket DESC LIMIT ?"
+    )
+    parameters.append(max(1, min(limit, 5_000)))
     with db() as connection:
-        rows = execute_query(connection,
-            "SELECT time, open, high, low, close, volume, source_symbol "
-            "FROM historical_candles WHERE symbol = ? ORDER BY time",
-            (symbol,),
-        ).fetchall()
-    return [dict(row) | {"buy_volume": 0.0, "sell_volume": 0.0} for row in rows]
-
+        rows = execute_query(connection, statement, parameters).fetchall()
+    return [
+        dict(row) | {"buy_volume": 0.0, "sell_volume": 0.0}
+        for row in reversed(rows)
+    ]
 
 def apply_event(payload: dict[str, Any], persist: bool = True) -> None:
     symbol = payload["symbol"]
@@ -214,50 +236,47 @@ def verify_history_import(token: str | None) -> None:
         raise HTTPException(status_code=403, detail="invalid history import token")
 
 def candles(symbol: str, seconds: int, limit: int, before: int | None = None) -> list[dict[str, Any]]:
-    buckets: dict[int, dict[str, Any]] = {}
-    historical = history_candles(symbol)
-    for event in historical:
-        stamp = int(event["time"])
-        key = stamp - (stamp % seconds)
-        candle = buckets.setdefault(key, {"time": key, "open": event["open"], "high": event["high"], "low": event["low"], "close": event["close"], "volume": 0.0, "buy_volume": 0.0, "sell_volume": 0.0})
-        candle["high"], candle["low"], candle["close"] = max(candle["high"], event["high"]), min(candle["low"], event["low"]), event["close"]
-        candle["volume"] += event["volume"]
-
-    recorded_trades = [
-        event for event in history_events(symbol)
-        if event["kind"] == "trade" and event.get("price") is not None
-    ]
-    recorded_trades.sort(key=lambda event: event_time(event["observed_at"]))
-    # Determine the active contract before replacing historical buckets.
-    # Otherwise an old event from a different contract can erase the imported
-    # DBN history even though every old event is discarded below.
+    safe_limit = max(1, min(limit, 5_000))
     active_contract = (last_trade[symbol].get("source_symbol") or "").upper()
     live_events = [
-        event for event in recorded_trades
-        if active_contract and (event.get("source_symbol") or "").upper() == active_contract
+        event for event in events[symbol]
+        if event["kind"] == "trade"
+        and event.get("price") is not None
+        and active_contract
+        and (event.get("source_symbol") or "").upper() == active_contract
+        and (before is None or int(event_time(event["observed_at"]).timestamp()) -
+             (int(event_time(event["observed_at"]).timestamp()) % seconds) < before)
     ]
-    if live_events:
-        first_live_bucket = min(int(event_time(event["observed_at"]).timestamp()) for event in live_events)
-        first_live_bucket -= first_live_bucket % seconds
-        buckets = {key: candle for key, candle in buckets.items() if key < first_live_bucket}
-
+    live_events.sort(key=lambda event: event_time(event["observed_at"]))
+    live_buckets: dict[int, dict[str, Any]] = {}
     for event in live_events:
         stamp = int(event_time(event["observed_at"]).timestamp())
         key = stamp - (stamp % seconds)
         price, size = float(event["price"]), float(event.get("size") or 0)
-        candle = buckets.setdefault(key, {"time": key, "open": price, "high": price, "low": price, "close": price, "volume": 0.0, "buy_volume": 0.0, "sell_volume": 0.0})
+        candle = live_buckets.setdefault(key, {
+            "time": key, "open": price, "high": price, "low": price,
+            "close": price, "volume": 0.0, "buy_volume": 0.0, "sell_volume": 0.0,
+        })
         candle["high"], candle["low"], candle["close"] = max(candle["high"], price), min(candle["low"], price), price
         candle["volume"] += size
         if event.get("side") == "ask": candle["buy_volume"] += size
         elif event.get("side") == "bid": candle["sell_volume"] += size
 
+    # Current-contract live trades replace overlapping imported candles. Keep
+    # older imported candles available for cursor-based history navigation.
+    cutoff = before
+    if live_buckets:
+        first_live_bucket = min(live_buckets)
+        if cutoff is None or first_live_bucket < cutoff:
+            cutoff = first_live_bucket
+    historical = history_candles(symbol, seconds, safe_limit, cutoff)
+    buckets = {candle["time"]: candle for candle in historical}
+    buckets.update(live_buckets)
     ordered = sorted(buckets.values(), key=lambda candle: candle["time"])
-    if before is not None:
-        ordered = [candle for candle in ordered if candle["time"] < before]
-    result = ordered[-max(1, min(limit, 5_000)) :]
+    result = ordered[-safe_limit:]
     logging.getLogger("uvicorn.error").info(
-        "chart data symbol=%s timeframe_seconds=%s history_rows=%s matching_live_trades=%s returned=%s first=%s last=%s",
-        symbol, seconds, len(historical), len(live_events), len(result),
+        "chart data symbol=%s timeframe_seconds=%s matching_live_trades=%s returned=%s first=%s last=%s",
+        symbol, seconds, len(live_events), len(result),
         result[0]["time"] if result else None, result[-1]["time"] if result else None,
     )
     return result
