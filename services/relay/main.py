@@ -86,6 +86,7 @@ def execute_query(connection: Any, statement: str, parameters: Any = ()) -> Any:
 def execute_many(connection: Any, statement: str, parameters: Any) -> Any:
     if DATABASE_URL:
         statement = statement.replace("?", "%s")
+        return connection.cursor().executemany(statement, parameters)
     return connection.executemany(statement, parameters)
 
 
