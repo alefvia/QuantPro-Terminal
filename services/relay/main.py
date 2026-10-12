@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import logging
 import secrets
 import sqlite3
 import psycopg
@@ -214,29 +215,33 @@ def verify_history_import(token: str | None) -> None:
 
 def candles(symbol: str, seconds: int, limit: int, before: int | None = None) -> list[dict[str, Any]]:
     buckets: dict[int, dict[str, Any]] = {}
-    for event in history_candles(symbol):
+    historical = history_candles(symbol)
+    for event in historical:
         stamp = int(event["time"])
         key = stamp - (stamp % seconds)
         candle = buckets.setdefault(key, {"time": key, "open": event["open"], "high": event["high"], "low": event["low"], "close": event["close"], "volume": 0.0, "buy_volume": 0.0, "sell_volume": 0.0})
         candle["high"], candle["low"], candle["close"] = max(candle["high"], event["high"]), min(candle["low"], event["low"]), event["close"]
         candle["volume"] += event["volume"]
-    live_events = [
+
+    recorded_trades = [
         event for event in history_events(symbol)
         if event["kind"] == "trade" and event.get("price") is not None
     ]
-    live_events.sort(key=lambda event: event_time(event["observed_at"]))
-    # A historical DBN download and a live ticker stream can overlap. Live
-    # trades are authoritative for their buckets; never merge two contracts or
-    # two feeds into one candle.
+    recorded_trades.sort(key=lambda event: event_time(event["observed_at"]))
+    # Determine the active contract before replacing historical buckets.
+    # Otherwise an old event from a different contract can erase the imported
+    # DBN history even though every old event is discarded below.
+    active_contract = (last_trade[symbol].get("source_symbol") or "").upper()
+    live_events = [
+        event for event in recorded_trades
+        if active_contract and (event.get("source_symbol") or "").upper() == active_contract
+    ]
     if live_events:
         first_live_bucket = min(int(event_time(event["observed_at"]).timestamp()) for event in live_events)
         first_live_bucket -= first_live_bucket % seconds
         buckets = {key: candle for key, candle in buckets.items() if key < first_live_bucket}
-    active_contract = (last_trade[symbol].get("source_symbol") or "").upper()
+
     for event in live_events:
-        source_symbol = (event.get("source_symbol") or "").upper()
-        if active_contract and source_symbol and source_symbol != active_contract:
-            continue
         stamp = int(event_time(event["observed_at"]).timestamp())
         key = stamp - (stamp % seconds)
         price, size = float(event["price"]), float(event.get("size") or 0)
@@ -245,10 +250,17 @@ def candles(symbol: str, seconds: int, limit: int, before: int | None = None) ->
         candle["volume"] += size
         if event.get("side") == "ask": candle["buy_volume"] += size
         elif event.get("side") == "bid": candle["sell_volume"] += size
+
     ordered = sorted(buckets.values(), key=lambda candle: candle["time"])
     if before is not None:
         ordered = [candle for candle in ordered if candle["time"] < before]
-    return ordered[-max(1, min(limit, 5_000)) :]
+    result = ordered[-max(1, min(limit, 5_000)) :]
+    logging.getLogger("uvicorn.error").info(
+        "chart data symbol=%s timeframe_seconds=%s history_rows=%s matching_live_trades=%s returned=%s first=%s last=%s",
+        symbol, seconds, len(historical), len(live_events), len(result),
+        result[0]["time"] if result else None, result[-1]["time"] if result else None,
+    )
+    return result
 
 def order_book(symbol: str) -> dict[str, Any]:
     levels = book[symbol]
