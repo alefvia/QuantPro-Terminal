@@ -172,16 +172,25 @@ def history_events(symbol: str, limit: int = 100_000) -> list[dict[str, Any]]:
     return [dict(row) for row in reversed(rows)]
 
 
+def time_bucket_expression(postgres: bool) -> str:
+    """Return a time bucket expression safe for each database's parameter syntax."""
+    if postgres:
+        return "time - MOD(time, %s)"
+    return "time - (time % ?)"
+
+
 def history_candles(symbol: str, seconds: int, limit: int, before: int | None = None) -> list[dict[str, Any]]:
     """Read only the requested historical page and aggregate it in the database."""
+    bucket_expression = time_bucket_expression(bool(DATABASE_URL))
+    placeholder = "%s" if DATABASE_URL else "?"
     statement = (
         "WITH bucket_rows AS ("
-        " SELECT time - (time % ?) AS bucket, time, open, high, low, close, volume "
+        f" SELECT {bucket_expression} AS bucket, time, open, high, low, close, volume "
         " FROM historical_candles WHERE symbol = ?"
     )
     parameters: list[Any] = [seconds, symbol]
     if before is not None:
-        statement += " AND (time - (time % ?)) < ?"
+        statement += f" AND ({bucket_expression}) < {placeholder}"
         parameters.extend((seconds, before))
     statement += (
         "), ranked AS ("
